@@ -8,6 +8,8 @@ struct AgentModelPicker: View {
     let backend: String
     @Binding var selection: String?
     @Binding var fastMode: Bool
+    /// The saved bot: whether its own sessions offer Fast mode, and why the agent refused it.
+    var bot: Bot?
     @Environment(BotStore.self) private var store
     @State private var catalog: AgentModels?
     @State private var catalogScope: String?
@@ -46,7 +48,8 @@ struct AgentModelPicker: View {
     }
 
     private var showsFastMode: Bool {
-        backend != "custom" && (catalog?.fastMode == true || fastMode)
+        (backend != "custom" && catalog?.fastMode == true) || fastMode
+            || (bot?.backend == backend && bot?.fastModeShown == true)
     }
 
     var body: some View {
@@ -54,7 +57,8 @@ struct AgentModelPicker: View {
             .onChange(of: backend) { _, _ in selection = nil }
             .task(id: requestKey) { await load() }
         if showsFastMode {
-            SwitchRow("Fast mode", detail: "Faster replies for more usage, on models that offer it.", isOn: $fastMode)
+            SwitchRow("Fast mode", detail: bot?.fastModeRefusal ?? "Faster replies for more usage, on models that offer it.",
+                      isOn: $fastMode)
                 .transition(.opacity)
         }
     }

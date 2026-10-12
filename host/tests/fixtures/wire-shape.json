@@ -16,6 +16,8 @@
     "event:bot.bot.deleted": "bool",
     "event:bot.bot.description": "string",
     "event:bot.bot.fastMode": "bool",
+    "event:bot.bot.fastModeIssue": "null",
+    "event:bot.bot.fastModeSupport": "string",
     "event:bot.bot.hidden": "bool",
     "event:bot.bot.id": "string",
     "event:bot.bot.kind": "string",

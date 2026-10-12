@@ -21,6 +21,69 @@ pub fn fast_mode_config(session: &Value) -> Option<&Value> {
     session["configOptions"].as_array()?.iter().find(|v| v["id"].as_str().is_some_and(|id| FAST_MODE_IDS.contains(&id)))
 }
 
+/// Whether the Fast mode option is on.
+pub fn fast_mode_on(config: &Value) -> bool {
+    config["currentValue"] == true || config["currentValue"] == "on"
+}
+
+/// Why the agent turned Fast mode off by itself, when it says: Claude's adapter appends it to
+/// the option's description ("Faster responses on supported models — requires extra usage…").
+pub fn fast_mode_refusal(config: &Value) -> Option<String> {
+    let description = config["description"].as_str()?;
+    let (_, why) = description.split_once(" — ")?;
+    text(&json!(why))
+}
+
+/// What a bot's agent says about Fast mode (wire `fastModeSupport` and `fastModeIssue`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum FastModeSupport {
+    /// No session has listed its options yet.
+    #[default]
+    Unknown,
+    Offered,
+    /// The session's model doesn't offer it.
+    Unsupported,
+    /// The agent turned it off after the bot asked for it (Claude: the account can't use it),
+    /// with its reason when it gave one. Asked again only once the user changes the setting.
+    Refused(Option<String>),
+}
+
+impl FastModeSupport {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Offered => "offered",
+            Self::Unsupported => "unsupported",
+            Self::Refused(_) => "refused",
+        }
+    }
+
+    pub fn issue(&self) -> Option<&str> {
+        match self {
+            Self::Refused(why) => why.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// Kept across host restarts (`fast-mode.<bot>`), so clients can offer the switch before
+    /// the first turn. A refusal isn't kept: the next host asks again.
+    pub fn stored(&self) -> Option<&'static str> {
+        match self {
+            Self::Unknown => None,
+            Self::Offered | Self::Refused(_) => Some("offered"),
+            Self::Unsupported => Some("unsupported"),
+        }
+    }
+
+    pub fn from_stored(v: Option<&str>) -> Self {
+        match v {
+            Some("offered") => Self::Offered,
+            Some("unsupported") => Self::Unsupported,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 /// The value that turns `config` on or off: a boolean, or the `on` / `off` select entries.
 /// `None` when it already is.
 pub fn fast_mode_change(config: &Value, on: bool) -> Option<Value> {
@@ -121,6 +184,25 @@ mod tests {
         }
         let other = json!({"configOptions": [{"id": "effort", "category": "thought_level", "type": "select"}]});
         assert!(fast_mode_config(&other).is_none());
+    }
+
+    #[test]
+    fn fast_mode_refusal_reads_the_reason_from_the_description() {
+        let refused = json!({"id": "fast", "currentValue": "off",
+            "description": "Faster responses on supported models — requires extra usage to be enabled for this account"});
+        assert_eq!(fast_mode_refusal(&refused).as_deref(), Some("requires extra usage to be enabled for this account"));
+        assert!(!fast_mode_on(&refused));
+        assert!(fast_mode_refusal(&json!({"description": "1.5x speed, increased usage"})).is_none());
+        assert!(fast_mode_on(&json!({"currentValue": true})));
+    }
+
+    #[test]
+    fn fast_mode_support_keeps_only_what_the_agent_offers_across_restarts() {
+        let refused = FastModeSupport::Refused(Some("no extra usage".into()));
+        assert_eq!(refused.as_str(), "refused");
+        assert_eq!(refused.issue(), Some("no extra usage"));
+        assert_eq!(FastModeSupport::from_stored(refused.stored()), FastModeSupport::Offered);
+        assert_eq!(FastModeSupport::from_stored(FastModeSupport::Unknown.stored()), FastModeSupport::Unknown);
     }
 
     #[test]

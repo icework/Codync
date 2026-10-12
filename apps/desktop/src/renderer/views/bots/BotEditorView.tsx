@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { fastModeRefusal, fastModeShown } from '@shared/fast-mode'
 import { draftOf, type BotDraft, type DirListing } from '@shared/models'
 import { CharacterAvatar } from '../../components/Avatar'
 import { CardSection, ChoicePicker, DropdownMenu, IconButton, Pill, SearchField, Spinner, ValueRow } from '../../components/Controls'
@@ -101,6 +102,7 @@ function BotSettingsForm({ draft, onChange, error, plugins }: {
   const set = <K extends keyof BotDraft>(key: K, value: BotDraft[K]) => onChange((d) => ({ ...d, [key]: value }))
   const setModel = useCallback((model: string | null) => onChange((d) => ({ ...d, model })), [onChange])
   const models = useAgentModels(draft.backend)
+  const saved = draft.id ? (store.bots.get(draft.id) ?? null) : null
 
   const backends = store.hello?.backends ?? []
   const backend = backends.find((b) => b.id === draft.backend)
@@ -158,10 +160,15 @@ function BotSettingsForm({ draft, onChange, error, plugins }: {
             ) : null}
           </div>
           <AgentModelPicker backend={draft.backend} models={models} selection={draft.model} onChange={setModel} />
-          {draft.backend !== 'custom' && (models.catalog?.fastMode || draft.fastMode) ? (
-            // Shown while the agent offers it, or while it's on so it can be turned off.
+          {(draft.backend !== 'custom' && models.catalog?.fastMode) || draft.fastMode || (saved?.backend === draft.backend && fastModeShown(saved)) ? (
+            // Shown while the agent offers it (its model list, or the bot's own sessions), or while it's on.
             <div className="fade-in">
-              <SwitchRow title="Fast mode" detail="Faster replies for more usage, on models that offer it." on={draft.fastMode ?? false} onChange={(on) => set('fastMode', on)} />
+              <SwitchRow
+                title="Fast mode"
+                detail={(saved && fastModeRefusal(saved)) ?? 'Faster replies for more usage, on models that offer it.'}
+                on={draft.fastMode ?? false}
+                onChange={(on) => set('fastMode', on)}
+              />
             </div>
           ) : null}
           <ValueRow

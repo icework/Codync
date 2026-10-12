@@ -175,6 +175,13 @@ extension BotStore {
         perform(replay: true) { _ = try await $0.updateBot(d) }
     }
 
+    public func setFastMode(_ bot: Bot, _ fastMode: Bool) {
+        var d = BotDraft(bot)
+        d.fastMode = fastMode
+        bots[bot.id]?.fastMode = fastMode
+        perform(replay: true) { _ = try await $0.updateBot(d) }
+    }
+
     // MARK: roster order
 
     /// Moves a dragged bot into `target`'s place, among bots with the same pin state. Shown at

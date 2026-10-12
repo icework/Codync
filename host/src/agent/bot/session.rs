@@ -2,12 +2,12 @@
 
 use super::{Actor, Conn, NoticeStyle, SessionCaps};
 use crate::agent::acp::{self, Acp, Incoming};
-use crate::agent::config::{fast_mode_change, fast_mode_config, model_config};
+use crate::agent::config::model_config;
 use crate::chat::context;
 use crate::store::{BotConfig, Entry, EntryKind, Lane, lane_key};
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 impl Actor {
@@ -143,7 +143,7 @@ impl Actor {
         {
             crate::market::vault::unlock(self.hub.clone()).await?;
         }
-        // An agent that can't resume keeps its session; its next new session gets the new setup.
+        // An agent that can't resume keeps its session; its next new session gets the new tools.
         if std::mem::take(&mut self.reload_sessions)
             && self.conn.as_ref().is_some_and(|c| c.sessions.load)
             && let Some(c) = self.conn.take()
@@ -199,7 +199,7 @@ impl Actor {
             {
                 conn.loaded.insert(sid.clone());
                 self.set_session(slot, Some(&sid));
-                self.apply_fast_mode(&sid, &res).await;
+                self.note_options(&sid, &res, false);
                 forked = true;
             } else {
                 tracing::warn!(bot = %self.cfg.id, "session/fork failed; the thread starts fresh");
@@ -248,7 +248,7 @@ impl Actor {
             match res {
                 Ok(loaded) => {
                     conn.loaded.insert(sid.clone());
-                    self.apply_fast_mode(&sid, &loaded).await;
+                    self.note_options(&sid, &loaded, false);
                     if let Some(s) = snapshot {
                         // Its system prompt now names the bot as rendered.
                         context::mark_announced(&self.hub.store, &self.cfg.id, &s, s.system_identity.clone())?;
@@ -277,7 +277,7 @@ impl Actor {
         let sid = res["sessionId"].as_str().ok_or_else(|| anyhow!("agent returned no sessionId"))?.to_owned();
         conn.loaded.insert(sid.clone());
         let options = select_model(&conn.acp, &res, &sid, &self.cfg).await?;
-        self.apply_fast_mode(&sid, &options).await;
+        self.note_options(&sid, &options, false);
         self.set_session(slot, Some(&sid));
         self.session_fresh = true;
         self.turn_session = Some(sid.clone());
@@ -293,7 +293,7 @@ impl Actor {
 
     /// A session request the agent doesn't answer in time stops the agent: a hung one
     /// would otherwise hold the bot, and its Stop, forever.
-    async fn session_request(&mut self, method: &str, params: Value) -> Result<Value> {
+    pub(super) async fn session_request(&mut self, method: &str, params: Value) -> Result<Value> {
         let acp = self.conn.as_ref().ok_or_else(|| anyhow!("agent not running"))?.acp.clone();
         if let Ok(result) = tokio::time::timeout(SESSION_TIMEOUT, acp.request(method, params)).await {
             return result;
@@ -302,28 +302,6 @@ impl Actor {
             c.acp.kill().await;
         }
         bail!("the agent didn't answer {method} within {}s", SESSION_TIMEOUT.as_secs())
-    }
-
-    /// Turns the session's Fast mode on or off as the bot asks; `options` is the agent's
-    /// latest answer for it (`configOptions`). A failure leaves the session at its own speed.
-    async fn apply_fast_mode(&mut self, sid: &str, options: &Value) {
-        // An answer without config options says nothing about Fast mode.
-        if !options["configOptions"].is_array() {
-            return;
-        }
-        let on = self.cfg.fast_mode;
-        let Some(config) = fast_mode_config(options) else {
-            if on {
-                self.notice("Fast mode isn't available for this agent or model.", NoticeStyle::Info);
-            }
-            return;
-        };
-        let (Some(config_id), Some(value)) = (config["id"].as_str(), fast_mode_change(config, on)) else { return };
-        let params = json!({"sessionId": sid, "configId": config_id, "value": value});
-        if let Err(error) = self.session_request("session/set_config_option", params).await {
-            tracing::warn!(bot = %self.cfg.id, error = format!("{error:#}"), "couldn't set Fast mode");
-            self.notice(&format!("Couldn't change Fast mode: {error:#}"), NoticeStyle::Info);
-        }
     }
 
     /// Memory failed to start: said once per actor, then the bot works without it.
@@ -421,5 +399,5 @@ pub(crate) async fn start_agent(command: &str, cwd: &str, env: &[(String, String
         fork: init["agentCapabilities"]["sessionCapabilities"]["fork"].is_object(),
     };
     let claude = init["agentCapabilities"]["_meta"]["claudeCode"].is_object();
-    Ok(Conn { acp, rx, sessions, claude, loaded: HashSet::new() })
+    Ok(Conn { acp, rx, sessions, claude, loaded: HashSet::new(), fast_options: HashMap::new() })
 }

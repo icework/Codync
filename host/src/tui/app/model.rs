@@ -94,6 +94,10 @@ pub struct Bot {
     pub auto: bool,
     pub model: Option<String>,
     pub fast_mode: bool,
+    /// What the agent says about Fast mode: `unknown`, `offered`, `unsupported` or `refused`.
+    pub fast_support: String,
+    /// Why the agent refused it.
+    pub fast_issue: Option<String>,
     pub pinned: bool,
     /// Where the user dragged it (see `App::roster`).
     pub position: i64,
@@ -121,6 +125,21 @@ fn strs(v: &Value) -> Vec<String> {
 }
 
 impl Bot {
+    /// An agent bot whose agent offers Fast mode, or one that has it on (so it can be turned off).
+    pub fn fast_shown(&self) -> bool {
+        !self.group && (self.fast_mode || self.fast_support == "offered" || self.fast_support == "refused")
+    }
+
+    /// Why Fast mode isn't in effect, when the agent turned it off itself.
+    pub fn fast_refusal(&self) -> Option<String> {
+        (self.fast_mode && self.fast_support == "refused").then(|| {
+            format!(
+                "The agent turned it off: {}. Switch it off and on to try again.",
+                self.fast_issue.as_deref().unwrap_or("not available")
+            )
+        })
+    }
+
     /// Where it works, as the header shows it.
     pub fn folder(&self, home: &str) -> String {
         if self.managed_workspace { "personal workspace".to_owned() } else { tilde(&self.cwd, home) }
@@ -140,6 +159,8 @@ impl Bot {
             auto: v["permission"] == "auto",
             model: v["model"].as_str().filter(|m| !m.is_empty()).map(str::to_owned),
             fast_mode: v["fastMode"].as_bool().unwrap_or(false),
+            fast_support: v["fastModeSupport"].as_str().unwrap_or("unknown").to_owned(),
+            fast_issue: v["fastModeIssue"].as_str().map(str::to_owned),
             pinned: v["pinned"].as_bool().unwrap_or(false),
             position: v["position"].as_i64().unwrap_or(0),
             hidden: v["hidden"].as_bool().unwrap_or(false),

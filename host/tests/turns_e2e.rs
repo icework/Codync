@@ -154,39 +154,74 @@ async fn a_member_busy_elsewhere_answers_only_the_latest_room_turn() {
     assert_eq!(finals.count(), 1);
 }
 
+/// A final reply that starts with `speed` and quotes `word` from its prompt.
+fn speed_reply(speed: &'static str, word: &'static str) -> impl Fn(&Value) -> bool {
+    move |e: &Value| {
+        e["kind"] == "agent"
+            && e["data"]["final"] == true
+            && e["data"]["text"].as_str().is_some_and(|t| t.starts_with(speed) && t.contains(word))
+    }
+}
+
+const FAST_ON: &str = r#""configId": "fast", "value": "on""#;
+const FAST_OFF: &str = r#""configId": "fast", "value": "off""#;
+
 #[tokio::test]
-async fn fast_mode_follows_the_bot_across_session_resumes() {
+async fn fast_mode_switches_live_sessions_without_a_restart() {
     if python_missing() {
         return;
     }
     let host = Host::start().await;
     let bot = host.bot("Quick", "tests/fixtures/fast_mode_agent.py").await;
     let calls = host.home.join("Quick").join("calls.jsonl");
-    let reply = |speed: &'static str, word: &'static str| {
-        move |e: &Value| {
-            e["kind"] == "agent"
-                && e["data"]["final"] == true
-                && e["data"]["text"].as_str().is_some_and(|t| t.starts_with(speed) && t.contains(word))
-        }
-    };
-    let set_on = r#""configId": "fast", "value": "on""#;
+    let log = || std::fs::read_to_string(&calls).unwrap();
 
     host.call("updateBot", json!({"id": bot, "fastMode": true})).await;
     host.call("send", json!({"botId": bot, "text": "one"})).await;
-    host.wait_for(&bot, Duration::from_secs(60), reply("fast on", "one")).await;
-    assert_eq!(std::fs::read_to_string(&calls).unwrap().matches(set_on).count(), 1);
+    host.wait_for(&bot, Duration::from_secs(60), speed_reply("fast on", "one")).await;
+    assert_eq!(log().matches(FAST_ON).count(), 1);
+    let sync = host.call("sync", json!({"since": 0})).await;
+    assert_eq!(sync["bots"][0]["fastModeSupport"], "offered");
 
-    // Turning it off resumes the same session in a new agent process, where it starts off.
+    // Off and on again: the same agent process switches the live session before each turn.
     host.call("updateBot", json!({"id": bot, "fastMode": false})).await;
     host.call("send", json!({"botId": bot, "text": "two"})).await;
-    host.wait_for(&bot, Duration::from_secs(60), reply("fast off", "two")).await;
-    let log = std::fs::read_to_string(&calls).unwrap();
-    assert!(log.contains("session/load"), "{log}");
-    assert_eq!(log.matches(set_on).count(), 1, "{log}");
-
-    // On again: the resumed session is switched back on.
+    host.wait_for(&bot, Duration::from_secs(60), speed_reply("fast off", "two")).await;
     host.call("updateBot", json!({"id": bot, "fastMode": true})).await;
     host.call("send", json!({"botId": bot, "text": "three"})).await;
-    host.wait_for(&bot, Duration::from_secs(60), reply("fast on", "three")).await;
-    assert_eq!(std::fs::read_to_string(&calls).unwrap().matches(set_on).count(), 2);
+    host.wait_for(&bot, Duration::from_secs(60), speed_reply("fast on", "three")).await;
+    let log = log();
+    assert!(!log.contains("session/load"), "{log}");
+    assert_eq!((log.matches(FAST_ON).count(), log.matches(FAST_OFF).count()), (2, 1), "{log}");
+}
+
+#[tokio::test]
+async fn a_refused_fast_mode_is_reported_and_not_asked_for_again() {
+    if python_missing() {
+        return;
+    }
+    let host = Host::start().await;
+    let bot = host.bot("Refused", "tests/fixtures/fast_mode_agent.py").await;
+    let folder = host.home.join("Refused");
+    std::fs::write(folder.join("refuse"), "").unwrap();
+    let log = || std::fs::read_to_string(folder.join("calls.jsonl")).unwrap();
+
+    host.call("updateBot", json!({"id": bot, "fastMode": true})).await;
+    host.call("send", json!({"botId": bot, "text": "one"})).await;
+    host.wait_for(&bot, Duration::from_secs(60), speed_reply("fast off", "one")).await;
+    let state = &host.call("sync", json!({"since": 0})).await["bots"][0];
+    assert_eq!(state["fastModeSupport"], "refused");
+    assert_eq!(state["fastModeIssue"], "requires extra usage");
+    assert_eq!(state["fastMode"], true, "the user's choice stays");
+
+    host.call("send", json!({"botId": bot, "text": "two"})).await;
+    host.wait_for(&bot, Duration::from_secs(60), speed_reply("fast off", "two")).await;
+    assert_eq!(log().matches(FAST_ON).count(), 1, "asked again after a refusal");
+
+    // Changing the setting asks again.
+    host.call("updateBot", json!({"id": bot, "fastMode": false})).await;
+    host.call("updateBot", json!({"id": bot, "fastMode": true})).await;
+    host.call("send", json!({"botId": bot, "text": "three"})).await;
+    host.wait_for(&bot, Duration::from_secs(60), speed_reply("fast off", "three")).await;
+    assert_eq!(log().matches(FAST_ON).count(), 2);
 }

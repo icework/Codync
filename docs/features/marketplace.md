@@ -50,9 +50,23 @@ The editor keeps Default, shows available models in a dropdown, and resets the s
 
 Claude Code's and Codex's ACP adapters offer Fast mode (faster replies for more usage) as a session config option: Claude's `fast`, Codex's `fast-mode`, each a `select` of `on`/`off` (a boolean for clients that opt into boolean options), listed only while the session's model supports it. `fastMode` in `agentModels` says whether the probe session offered it, so it reflects the agent's default model.
 
-A bot's `fastMode` setting is applied by the host after every `session/new` (after the model switch, whose answer can change the options), `session/load` and `session/fork`, because the adapters start each session or process at their own default. The host sends `session/set_config_option` only when the value differs. When a bot asks for Fast mode and the session lists config options without it, the chat gets an info notice; a failed switch is a notice too, and the turn continues at normal speed. Changing the setting restarts the agent before the next turn and resumes its sessions, so the conversation context is kept (an agent that can't resume gets it on its next new session).
+The host keeps each live session's Fast mode option as the agent last listed it: from `session/new` (after the model switch, whose answer can change the options), `session/load`, `session/fork`, `session/set_config_option` answers and `config_option_update` notifications. Before every turn it switches the session to the bot's `fastMode` with `session/set_config_option` when the value differs, so changing the setting needs no agent restart and keeps the context. The adapters start each session or process at their own default, which is why a resumed session is switched again.
 
-The iPhone and desktop editors show the Fast mode switch as its own row under Model when the agent offers it, or while it's on so it can be turned off, and never for a custom command. The terminal UI always lists the field and notes when the agent doesn't offer it.
+The bot's runtime carries what the agent says (`fastModeSupport`, `fastModeIssue` in the bot payload):
+
+| `fastModeSupport` | Meaning |
+|---|---|
+| `unknown` | No session has listed its options yet. |
+| `offered` | The agent offers it for the session's model. |
+| `unsupported` | The session's model doesn't (the chat gets an info notice while the bot asks for it). |
+| `refused` | The agent turned it off right after the bot asked, or despite the switch: Claude does this for an account without extra usage and appends the reason to the option's description, which becomes `fastModeIssue`. The host stops asking until the user changes the setting or the host restarts. |
+
+`offered` and `unsupported` are kept across host restarts (`fast-mode.<bot>` in the kv store); a refusal isn't, so a new host asks again.
+
+Clients show Fast mode for an agent bot whose runtime says `offered` or `refused`, or while it's on (so it can be turned off); never for a group:
+
+- Composer: the desktop shows a ⚡ button next to +: filled while on, tinted with the warning color while refused (its tooltip gives the reason). The iPhone adds a Fast mode item to the + menu and a ⚡ badge on the + button while on. The terminal UI shows `⚡ fast` or `⚡ refused` in the chat header and toggles with `F`.
+- Bot settings: a Fast mode switch row under Model when the agent's model list offers it (never for a custom command), when the bot's own sessions do, or while it's on. While refused, its detail gives the reason. The terminal UI form always lists the field and notes when the agent doesn't offer it.
 
 ## Secure connection setup
 

@@ -107,8 +107,10 @@ pub(super) fn form_view(buf: &mut Buffer, area: Rect, app: &App, f: &Form) {
             }
             Field::Fast => {
                 let s = if f.fast { "◉ On   ○ Off" } else { "○ On   ◉ Off" };
-                // Known once the agent's model list loads.
+                // Known once the agent's model list loads, or once the bot's own sessions say.
+                let saved = f.bot_id.as_ref().and_then(|id| app.bots.get(id)).filter(|b| b.backend == f.backend);
                 let offered = match app.models.get(&f.backend) {
+                    _ if saved.is_some_and(super::super::app::Bot::fast_shown) => "",
                     Some(Some(_)) if !app.fast_mode.contains(&f.backend) => "  · not offered by this agent",
                     _ => "",
                 };
@@ -184,14 +186,12 @@ pub(super) fn form_view(buf: &mut Buffer, area: Rect, app: &App, f: &Form) {
     if let Some(e) = &f.error {
         put(buf, inner.x, by - 1, inner.width, e, t.red.patch(t.panel));
     } else if f.current() == Field::Fast {
-        put(
-            buf,
-            inner.x,
-            by - 1,
-            inner.width,
-            "Faster replies for more usage, on models that offer it (Claude Code, Codex)",
-            t.dim.patch(t.panel),
-        );
+        let refusal = f.bot_id.as_ref().and_then(|id| app.bots.get(id)).and_then(super::super::app::Bot::fast_refusal);
+        let (line, style) = match refusal {
+            Some(why) => (why, t.amber),
+            None => ("Faster replies for more usage, on models that offer it (Claude Code, Codex)".to_owned(), t.dim),
+        };
+        put(buf, inner.x, by - 1, inner.width, &line, style.patch(t.panel));
     } else if f.current() == Field::Computer {
         put(
             buf,

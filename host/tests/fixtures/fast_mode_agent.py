@@ -1,8 +1,11 @@
 """ACP agent offering Fast mode like Claude's adapter: a `fast` select that is off in
 every new process. It resumes sessions, logs session calls to calls.jsonl in its
-folder, and answers each prompt with its speed and the prompt text."""
+folder, and answers each prompt with its speed and the prompt text. With a `refuse`
+file in its folder it turns Fast mode back off during a prompt, the way Claude does
+for an account without extra usage."""
 
 import json
+import os
 import sys
 
 fast = "off"
@@ -17,9 +20,10 @@ def log(value):
         f.write(json.dumps(value) + "\n")
 
 
-def options():
+def options(description="Faster responses on supported models"):
     return {"configOptions": [{
-        "id": "fast", "name": "Fast mode", "category": "model_config", "type": "select", "currentValue": fast,
+        "id": "fast", "name": "Fast mode", "description": description, "category": "model_config",
+        "type": "select", "currentValue": fast,
         "options": [{"value": "on", "name": "On"}, {"value": "off", "name": "Off"}],
     }]}
 
@@ -40,6 +44,11 @@ for line in sys.stdin:
         fast = params["value"]
         send({"id": rid, "result": options()})
     elif method == "session/prompt":
+        if fast == "on" and os.path.exists("refuse"):
+            fast = "off"
+            update = {"sessionUpdate": "config_option_update",
+                      **options("Faster responses on supported models — requires extra usage")}
+            send({"method": "session/update", "params": {"sessionId": "s1", "update": update}})
         text = " ".join(b.get("text", "") for b in params.get("prompt", []))
         update = {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": f"fast {fast} · {text}"}}
         send({"method": "session/update", "params": {"sessionId": "s1", "update": update}})

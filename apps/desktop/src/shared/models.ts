@@ -22,6 +22,10 @@ export interface Bot {
   model?: string | null
   /** The agent's Fast mode (Claude Code, Codex): faster replies for more usage. */
   fastMode: boolean
+  /** What the agent says about Fast mode: `unknown` (no session yet), `offered`, `unsupported`,
+   *  or `refused` (it turned it off; `fastModeIssue` says why). */
+  fastModeSupport: string
+  fastModeIssue: string | null
   pinned: boolean
   /** Where the user dragged it, lowest first (after pinned bots); ties sort by recent activity. */
   position: number
@@ -62,6 +66,8 @@ export function normalizeBot(raw: Partial<Bot> & { id: string }): Bot {
     permission: raw.permission ?? 'auto',
     model: raw.model ?? null,
     fastMode: raw.fastMode ?? false,
+    fastModeSupport: raw.fastModeSupport ?? 'unknown',
+    fastModeIssue: raw.fastModeIssue ?? null,
     pinned: raw.pinned ?? false,
     position: raw.position ?? 0,
     hidden: raw.hidden ?? false,

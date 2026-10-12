@@ -23,6 +23,10 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
     public var model: String?
     /// The agent's Fast mode (Claude Code, Codex): faster replies for more usage.
     public var fastMode: Bool = false
+    /// What the agent says about Fast mode: `unknown` (no session yet), `offered`, `unsupported`,
+    /// or `refused` (it turned it off; `fastModeIssue` says why).
+    public var fastModeSupport: String = "unknown"
+    public var fastModeIssue: String?
     public var pinned: Bool
     /// Where the user dragged it, lowest first (after pinned bots); ties sort by recent activity.
     public var position: Int = 0
@@ -405,6 +409,8 @@ extension Bot {
         permission = try c.decodeIfPresent(String.self, forKey: .permission) ?? "auto"
         model = try c.decodeIfPresent(String.self, forKey: .model)
         fastMode = try c.decodeIfPresent(Bool.self, forKey: .fastMode) ?? false
+        fastModeSupport = try c.decodeIfPresent(String.self, forKey: .fastModeSupport) ?? "unknown"
+        fastModeIssue = try c.decodeIfPresent(String.self, forKey: .fastModeIssue)
         pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         position = try c.decodeIfPresent(Int.self, forKey: .position) ?? 0
         hidden = try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false

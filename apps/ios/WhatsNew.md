@@ -5,14 +5,12 @@ listing what iPhone users notice. tools/asc-submit.py reads the released version
 a version without one gets a generic "Bug fixes and improvements" line. Delete old sections.
 -->
 
-## 2.14.0
+## 2.15.0
 
 ### zh-Hant
 
-- 同一台電腦上的 bot 可以自己排順序：按住一列再拖到想要的位置。釘選的 bot 仍在最上面，排好的順序會同步到你的每台裝置。
-- 新增 bot 時，預設會選電腦上已安裝、Codync 認得的 agent，不再挑到沒聽過的 agent。
+- Claude Code 和 Codex 的 bot 可以開啟快速模式：回覆更快，用量也較多。在 bot 設定的「模型」下方切換，只在支援的模型上生效。
 
 ### en-US
 
-- Arrange the bots on a computer your way: touch and hold a row, then drag it where you want it. Pinned bots stay on top, and the order syncs to all your devices.
-- A new bot now starts with an agent that's installed on your computer and that Codync knows, instead of an unfamiliar one.
+- Turn on Fast mode for Claude Code and Codex bots: faster replies for more usage. Switch it in the bot's settings under Model; it applies on models that offer it.

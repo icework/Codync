@@ -13,7 +13,7 @@ impl Actor {
     pub(super) async fn on_cmd(&mut self, cmd: Cmd, done_tx: &mpsc::UnboundedSender<Done>) -> bool {
         match cmd {
             Cmd::RefreshTools => {
-                self.tools_changed = true;
+                self.reload_sessions = true;
             }
             Cmd::Routine(id) => {
                 self.queue.push_back(Queued::Routine(id));
@@ -79,7 +79,9 @@ impl Actor {
                     || cfg.command != self.cfg.command
                     || cfg.cwd != self.cfg.cwd
                     || cfg.model != self.cfg.model;
-                self.tools_changed |= cfg.connectors != self.cfg.connectors || cfg.computer != self.cfg.computer;
+                self.reload_sessions |= cfg.connectors != self.cfg.connectors
+                    || cfg.computer != self.cfg.computer
+                    || cfg.fast_mode != self.cfg.fast_mode;
                 // Name, description and skill changes reach the agent as a profile update
                 // on the next message (see `context`).
                 self.cfg = cfg;

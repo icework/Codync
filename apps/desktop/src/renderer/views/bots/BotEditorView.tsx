@@ -7,6 +7,7 @@ import { ModalHeader, Sheet, useDismiss } from '../../components/Overlay'
 import { font } from '../../lib/fonts'
 import { AVATAR_COLORS, AVATAR_SHAPES } from '../../lib/theme'
 import { useStore } from '../../store/context'
+import { useAgentModels } from './agent-models'
 import { AgentModelPicker } from './AgentModelPicker'
 import { errorText, fillDefaults, isValid, lastPathComponent, normalized, usePlugins, type Plugins } from './drafts'
 import { MemoryCard } from './MemoryView'
@@ -99,6 +100,7 @@ function BotSettingsForm({ draft, onChange, error, plugins }: {
   const avatarRef = useRef<HTMLButtonElement>(null)
   const set = <K extends keyof BotDraft>(key: K, value: BotDraft[K]) => onChange((d) => ({ ...d, [key]: value }))
   const setModel = useCallback((model: string | null) => onChange((d) => ({ ...d, model })), [onChange])
+  const models = useAgentModels(draft.backend)
 
   const backends = store.hello?.backends ?? []
   const backend = backends.find((b) => b.id === draft.backend)
@@ -155,7 +157,13 @@ function BotSettingsForm({ draft, onChange, error, plugins }: {
               />
             ) : null}
           </div>
-          <AgentModelPicker backend={draft.backend} selection={draft.model} onChange={setModel} />
+          <AgentModelPicker backend={draft.backend} models={models} selection={draft.model} onChange={setModel} />
+          {draft.backend !== 'custom' && (models.catalog?.fastMode || draft.fastMode) ? (
+            // Shown while the agent offers it, or while it's on so it can be turned off.
+            <div className="fade-in">
+              <SwitchRow title="Fast mode" detail="Faster replies for more usage, on models that offer it." on={draft.fastMode ?? false} onChange={(on) => set('fastMode', on)} />
+            </div>
+          ) : null}
           <ValueRow
             label="Workspace"
             detail={

@@ -93,6 +93,7 @@ pub struct Bot {
     pub managed_workspace: bool,
     pub auto: bool,
     pub model: Option<String>,
+    pub fast_mode: bool,
     pub pinned: bool,
     /// Where the user dragged it (see `App::roster`).
     pub position: i64,
@@ -138,6 +139,7 @@ impl Bot {
             managed_workspace: v["managedWorkspace"] == true,
             auto: v["permission"] == "auto",
             model: v["model"].as_str().filter(|m| !m.is_empty()).map(str::to_owned),
+            fast_mode: v["fastMode"].as_bool().unwrap_or(false),
             pinned: v["pinned"].as_bool().unwrap_or(false),
             position: v["position"].as_i64().unwrap_or(0),
             hidden: v["hidden"].as_bool().unwrap_or(false),

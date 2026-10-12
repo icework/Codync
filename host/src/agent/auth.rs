@@ -129,49 +129,7 @@ pub async fn models(store: &Store, backend: &str) -> Result<Value> {
     .await;
     acp.kill().await;
     let session = result.context("the agent's model list timed out")??;
-    Ok(model_catalog(&session))
-}
-
-/// IDs are agent-defined: use the category, with legacy conventional IDs as a fallback.
-pub(crate) fn model_config(session: &Value) -> Option<&Value> {
-    let options = session["configOptions"].as_array()?;
-    let is_select = |v: &&Value| v["type"] == "select" || v.get("type").is_none();
-    options
-        .iter()
-        .filter(is_select)
-        .find(|v| v["category"] == "model")
-        .or_else(|| options.iter().filter(is_select).find(|v| v["id"] == "model" || v["id"] == "models"))
-}
-
-fn model_catalog(session: &Value) -> Value {
-    fn collect(options: &Value, out: &mut Vec<Value>) {
-        for option in options.as_array().into_iter().flatten() {
-            if option["options"].is_array() {
-                collect(&option["options"], out);
-            } else if let Some(id) = text(&option["value"])
-                && !out.iter().any(|v| v["id"] == id)
-            {
-                out.push(json!({"id": id, "name": text(&option["name"]).unwrap_or(id),
-                    "description": text(&option["description"])}));
-            }
-        }
-    }
-    let mut models = Vec::new();
-    let current = if let Some(config) = model_config(session) {
-        collect(&config["options"], &mut models);
-        text(&config["currentValue"])
-    } else {
-        for model in session["models"]["availableModels"].as_array().into_iter().flatten() {
-            if let Some(id) = text(&model["modelId"])
-                && !models.iter().any(|v| v["id"] == id)
-            {
-                models.push(json!({"id": id, "name": text(&model["name"]).unwrap_or(id),
-                    "description": text(&model["description"])}));
-            }
-        }
-        text(&session["models"]["currentModelId"])
-    };
-    json!({"models": models, "currentModelId": current})
+    Ok(crate::agent::config::catalog(&session))
 }
 
 async fn probe(store: &Store, backend: &str) -> Result<Status> {
@@ -367,47 +325,6 @@ pub async fn set_env(store: &Store, backend: &str, vars: &Map<String, Value>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn model_catalog_reads_grouped_config_and_preserves_agent_ids() {
-        let session = json!({"configOptions": [{
-            "id": "provider-model", "category": "model", "type": "select", "currentValue": "m2",
-            "options": [{"group": "a", "options": [
-                {"value": "m1", "name": "First"}, {"value": "m2", "name": "Second"},
-                {"value": "m1", "name": "Duplicate"}
-            ]}]
-        }], "models": {"availableModels": [{"modelId": "legacy", "name": "Legacy"}]}});
-        assert_eq!(model_config(&session).unwrap()["id"], "provider-model");
-        let result = model_catalog(&session);
-        assert_eq!(result["currentModelId"], "m2");
-        assert_eq!(result["models"].as_array().unwrap().len(), 2);
-        assert_eq!(result["models"][0]["id"], "m1");
-        assert_eq!(result["models"][1]["name"], "Second");
-    }
-
-    #[test]
-    fn model_catalog_reads_legacy_and_missing_lists() {
-        let result = model_catalog(&json!({"models": {
-            "currentModelId": "a", "availableModels": [
-                {"modelId": "a", "name": "Agent model", "description": "Available here"},
-                {"name": "No ID"}
-            ]
-        }}));
-        assert_eq!(result["models"].as_array().unwrap().len(), 1);
-        assert_eq!(result["models"][0]["description"], "Available here");
-        assert_eq!(model_catalog(&json!({})), json!({"models": [], "currentModelId": null}));
-    }
-
-    #[test]
-    fn model_config_prefers_category_and_ignores_unknown_types() {
-        let session = json!({"configOptions": [
-            {"id": "model", "type": "boolean"},
-            {"id": "models", "type": "select"},
-            {"id": "engine", "category": "model", "type": "select"}
-        ]});
-        assert_eq!(model_config(&session).unwrap()["id"], "engine");
-        assert!(model_config(&json!({"configOptions": [{"id": "model", "type": "boolean"}]})).is_none());
-    }
 
     fn cmd() -> Cmd {
         Cmd { program: "npx -y pkg@1".into(), args: "--acp".into() }

@@ -20,6 +20,8 @@ export interface Bot {
   /** `ask` or `auto`. */
   permission: string
   model?: string | null
+  /** The agent's Fast mode (Claude Code, Codex): faster replies for more usage. */
+  fastMode: boolean
   pinned: boolean
   /** Where the user dragged it, lowest first (after pinned bots); ties sort by recent activity. */
   position: number
@@ -59,6 +61,7 @@ export function normalizeBot(raw: Partial<Bot> & { id: string }): Bot {
     managedWorkspace: raw.managedWorkspace ?? false,
     permission: raw.permission ?? 'auto',
     model: raw.model ?? null,
+    fastMode: raw.fastMode ?? false,
     pinned: raw.pinned ?? false,
     position: raw.position ?? 0,
     hidden: raw.hidden ?? false,
@@ -404,6 +407,7 @@ export interface BotDraft {
   cwd: string
   permission: string
   model?: string | null
+  fastMode?: boolean
   pinned?: boolean
   hidden?: boolean
   notify?: boolean | null
@@ -424,6 +428,7 @@ export function draftOf(bot: Bot): BotDraft {
     cwd: bot.managedWorkspace ? '' : bot.cwd,
     permission: bot.permission,
     model: bot.model ?? null,
+    fastMode: bot.fastMode,
     pinned: bot.pinned,
     hidden: bot.hidden,
     notify: bot.notify ?? null,

@@ -454,4 +454,12 @@ mod tests {
         assert!(app.bots["b"].computer);
         assert!(FIELDS.contains(&Field::Computer));
     }
+
+    #[test]
+    fn fast_mode_survives_loading_the_editor() {
+        let mut app = test_app();
+        app.upsert_bot(&json!({"id":"b", "fastMode":true}));
+        assert!(app.bots["b"].fast_mode);
+        assert!(FIELDS.contains(&Field::Fast));
+    }
 }

@@ -132,6 +132,7 @@ pub enum Field {
     Instructions,
     Agent,
     Model,
+    Fast,
     Folder,
     Approvals,
     Notify,
@@ -142,11 +143,12 @@ pub enum Field {
     Skills,
 }
 
-pub const FIELDS: [Field; 12] = [
+pub const FIELDS: [Field; 13] = [
     Field::Name,
     Field::Instructions,
     Field::Agent,
     Field::Model,
+    Field::Fast,
     Field::Folder,
     Field::Approvals,
     Field::Notify,
@@ -170,6 +172,7 @@ pub struct Form {
     pub instructions: Editor,
     pub backend: String,
     pub model: Editor,
+    pub fast: bool,
     pub cwd: String,
     pub auto: bool,
     pub notify: bool,

@@ -40,11 +40,19 @@ See [file structure](../architecture/file-structure.md), [bot collaboration](bot
 
 ## Model selection
 
-The shared bot editor requests `agentModels {backend}` from the selected computer. The host starts an isolated ACP session under its probe directory with saved agent credentials, no MCP servers and no prompt, then closes the process. The response is `{models: [{id, name, description}], currentModelId}`.
+The shared bot editor requests `agentModels {backend}` from the selected computer. The host starts an isolated ACP session under its probe directory with saved agent credentials, no MCP servers and no prompt, then closes the process. The response is `{models: [{id, name, description}], currentModelId, fastMode}`.
 
 Discovery prefers ACP `configOptions` with category `model` (including grouped options), with conventional `model`/`models` IDs as a compatibility fallback. Older agents may expose `models.availableModels`. Model names and IDs come from the agent; Codync does not bundle a provider catalog. See the [ACP config option contract](https://agentclientprotocol.com/protocol/v1/session-config-options).
 
 The editor keeps Default, shows available models in a dropdown, and resets the selected model when changing agents. Errors are visible and retryable. Custom commands and agents without model discovery retain manual ID entry; an existing unlisted ID is preserved. The probe uses an isolated directory, so project-specific agent configuration can differ from the real bot session. Changing the model restarts the bot's agent sessions with fresh model context and preserves the stored chat history. The agent remains responsible for validating availability when a session starts.
+
+## Fast mode
+
+Claude Code's and Codex's ACP adapters offer Fast mode (faster replies for more usage) as a session config option: Claude's `fast`, Codex's `fast-mode`, each a `select` of `on`/`off` (a boolean for clients that opt into boolean options), listed only while the session's model supports it. `fastMode` in `agentModels` says whether the probe session offered it, so it reflects the agent's default model.
+
+A bot's `fastMode` setting is applied by the host after every `session/new` (after the model switch, whose answer can change the options), `session/load` and `session/fork`, because the adapters start each session or process at their own default. The host sends `session/set_config_option` only when the value differs. When a bot asks for Fast mode and the session lists config options without it, the chat gets an info notice; a failed switch is a notice too, and the turn continues at normal speed. Changing the setting restarts the agent before the next turn and resumes its sessions, so the conversation context is kept (an agent that can't resume gets it on its next new session).
+
+The iPhone and desktop editors show the Fast mode switch as its own row under Model when the agent offers it, or while it's on so it can be turned off, and never for a custom command. The terminal UI always lists the field and notes when the agent doesn't offer it.
 
 ## Secure connection setup
 

@@ -198,6 +198,9 @@ impl App {
                         Some((id.clone(), m["name"].as_str().unwrap_or(&id).to_owned()))
                     })
                     .collect();
+                if v["fastMode"] == true {
+                    self.fast_mode.insert(backend.clone());
+                }
                 self.models.insert(backend, Some(list));
             }
             Reply::Downloaded => {

@@ -22,3 +22,20 @@ import Testing
     let selected = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(BotUpdate(draft: draft))) as? [String: Any])
     #expect(selected["model"] as? String == "agent-model")
 }
+
+@Test func modelCatalogReportsFastModeAndOlderHostsOmitIt() throws {
+    let offered = try JSONDecoder().decode(AgentModels.self, from: Data(#"{"models":[],"fastMode":true}"#.utf8))
+    #expect(offered.fastMode == true)
+    let older = try JSONDecoder().decode(AgentModels.self, from: Data(#"{"models":[]}"#.utf8))
+    #expect(older.fastMode == nil)
+}
+
+@Test func botFastModeReachesTheSettingsDraft() throws {
+    let bot = try JSONDecoder().decode(Bot.self, from: Data(#"{"id":"b","backend":"codex","fastMode":true}"#.utf8))
+    #expect(bot.fastMode)
+    let draft = BotDraft(bot)
+    let body = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(BotUpdate(draft: draft))) as? [String: Any])
+    #expect(body["fastMode"] as? Bool == true)
+    let older = try JSONDecoder().decode(Bot.self, from: Data(#"{"id":"b"}"#.utf8))
+    #expect(!older.fastMode)
+}

@@ -214,6 +214,7 @@ mod tests {
             cwd: "/tmp".into(),
             permission: Permission::Ask,
             model: None,
+            fast_mode: false,
             pinned: false,
             position: 0,
             hidden: false,

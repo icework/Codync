@@ -14,7 +14,7 @@ use super::style::{FACE, avatar, bot_color, face_style, theme};
 
 pub(super) fn form_view(buf: &mut Buffer, area: Rect, app: &App, f: &Form) {
     let t = theme();
-    let r = centered(area, 88, 30);
+    let r = centered(area, 88, 32);
     let title = match &f.bot_id {
         Some(_) => format!("Edit {}", f.name.text),
         None => "New bot · 2/2 name and looks".into(),
@@ -48,6 +48,7 @@ pub(super) fn form_view(buf: &mut Buffer, area: Rect, app: &App, f: &Form) {
             Field::Instructions => "Instructions",
             Field::Agent => "Agent",
             Field::Model => "Model",
+            Field::Fast => "Fast mode",
             Field::Folder => "Workspace",
             Field::Approvals => "Approvals",
             Field::Notify => "Notify",
@@ -103,6 +104,15 @@ pub(super) fn form_view(buf: &mut Buffer, area: Rect, app: &App, f: &Form) {
                 if !hint.is_empty() && w(&f.model.text) + w(&hint) + 2 < usize::from(vw) {
                     rput(buf, inner.right(), y, &hint, t.dim.patch(base));
                 }
+            }
+            Field::Fast => {
+                let s = if f.fast { "◉ On   ○ Off" } else { "○ On   ◉ Off" };
+                // Known once the agent's model list loads.
+                let offered = match app.models.get(&f.backend) {
+                    Some(Some(_)) if !app.fast_mode.contains(&f.backend) => "  · not offered by this agent",
+                    _ => "",
+                };
+                put(buf, vx, y, vw, &format!("{s}{offered}"), t.text.patch(base));
             }
             Field::Agent => {
                 put(buf, vx, y, vw, &format!("‹ {agent_name} ›"), t.text.patch(base));
@@ -173,6 +183,15 @@ pub(super) fn form_view(buf: &mut Buffer, area: Rect, app: &App, f: &Form) {
     let by = inner.bottom() - 1;
     if let Some(e) = &f.error {
         put(buf, inner.x, by - 1, inner.width, e, t.red.patch(t.panel));
+    } else if f.current() == Field::Fast {
+        put(
+            buf,
+            inner.x,
+            by - 1,
+            inner.width,
+            "Faster replies for more usage, on models that offer it (Claude Code, Codex)",
+            t.dim.patch(t.panel),
+        );
     } else if f.current() == Field::Computer {
         put(
             buf,
@@ -197,7 +216,7 @@ pub(super) fn form_view(buf: &mut Buffer, area: Rect, app: &App, f: &Form) {
         Field::Connectors | Field::Skills => "←→ move · space toggle · tab next",
         Field::Agent => "←→ change · ↵ install / sign in · tab next",
         Field::Model => "←→ pick a model · or type its id",
-        Field::Color | Field::Shape | Field::Approvals | Field::Notify | Field::Computer => {
+        Field::Fast | Field::Color | Field::Shape | Field::Approvals | Field::Notify | Field::Computer => {
             "←→ change · tab next field"
         }
         Field::Instructions => "⇧↵ new line · tab next field",

@@ -1,5 +1,5 @@
-//! A real host driving scripted ACP agents: Stop on an agent that ignores it, and room turns
-//! that a newer group message replaced.
+//! A real host driving scripted ACP agents: Stop on an agent that ignores it, room turns
+//! that a newer group message replaced, and Fast mode across session resumes.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -152,4 +152,41 @@ async fn a_member_busy_elsewhere_answers_only_the_latest_room_turn() {
     assert!(!rooms.iter().any(|p| p.contains("User: first") && !p.contains("User: second")), "{rooms:?}");
     let finals = host.entries(&group).await.into_iter().filter(|e| e["kind"] == "agent" && e["data"]["final"] == true);
     assert_eq!(finals.count(), 1);
+}
+
+#[tokio::test]
+async fn fast_mode_follows_the_bot_across_session_resumes() {
+    if python_missing() {
+        return;
+    }
+    let host = Host::start().await;
+    let bot = host.bot("Quick", "tests/fixtures/fast_mode_agent.py").await;
+    let calls = host.home.join("Quick").join("calls.jsonl");
+    let reply = |speed: &'static str, word: &'static str| {
+        move |e: &Value| {
+            e["kind"] == "agent"
+                && e["data"]["final"] == true
+                && e["data"]["text"].as_str().is_some_and(|t| t.starts_with(speed) && t.contains(word))
+        }
+    };
+    let set_on = r#""configId": "fast", "value": "on""#;
+
+    host.call("updateBot", json!({"id": bot, "fastMode": true})).await;
+    host.call("send", json!({"botId": bot, "text": "one"})).await;
+    host.wait_for(&bot, Duration::from_secs(60), reply("fast on", "one")).await;
+    assert_eq!(std::fs::read_to_string(&calls).unwrap().matches(set_on).count(), 1);
+
+    // Turning it off resumes the same session in a new agent process, where it starts off.
+    host.call("updateBot", json!({"id": bot, "fastMode": false})).await;
+    host.call("send", json!({"botId": bot, "text": "two"})).await;
+    host.wait_for(&bot, Duration::from_secs(60), reply("fast off", "two")).await;
+    let log = std::fs::read_to_string(&calls).unwrap();
+    assert!(log.contains("session/load"), "{log}");
+    assert_eq!(log.matches(set_on).count(), 1, "{log}");
+
+    // On again: the resumed session is switched back on.
+    host.call("updateBot", json!({"id": bot, "fastMode": true})).await;
+    host.call("send", json!({"botId": bot, "text": "three"})).await;
+    host.wait_for(&bot, Duration::from_secs(60), reply("fast on", "three")).await;
+    assert_eq!(std::fs::read_to_string(&calls).unwrap().matches(set_on).count(), 2);
 }

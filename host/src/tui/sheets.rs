@@ -175,7 +175,7 @@ fn multiline(buf: &mut Buffer, r: Rect, e: &Editor, placeholder: &str, active: b
 pub fn market(buf: &mut Buffer, area: Rect, app: &App, m: &Market) {
     let t = theme();
     let r = centered(area, 96, 30);
-    let title = format!("Marketplace · {}", app.host);
+    let title = format!("Extensions · {}", app.host);
     let inner = frame_box(buf, r, t.text, t.panel, Some((&title, t.text)));
     let mut x = inner.x;
     for (tab, label) in TABS {
@@ -198,12 +198,19 @@ pub fn market(buf: &mut Buffer, area: Rect, app: &App, m: &Market) {
     for (i, item) in rows.iter().enumerate().skip(window(m.cursor, list_h)).take(list_h) {
         let base = row(buf, inner, y, i == m.cursor);
         let (mark, name, detail, right): (&str, String, String, String) = match item {
+            Row::Node => (
+                "+",
+                "Add Node.js".into(),
+                "Some agents need it to run. Codync adds a copy just for them.".into(),
+                String::new(),
+            ),
             Row::Agent(b) => {
                 let status = match (b["installed"] == true, b["signedIn"].as_bool()) {
+                    (false, _) if b["curated"] == true => "not installed",
+                    _ if b["node"] == "missing" => "needs Node.js",
                     (_, Some(true)) => "signed in",
                     (true, Some(false)) => "not signed in",
                     (true, None) => "installed",
-                    (false, _) if b["curated"] == true => "not installed",
                     (false, _) => "sets up on first use",
                 };
                 let mark = if b["signedIn"] == true || b["installed"] == true { "✓" } else { "↓" };
@@ -239,7 +246,7 @@ pub fn market(buf: &mut Buffer, area: Rect, app: &App, m: &Market) {
     let keys = match m.tab {
         Tab::Agents => "tab switch · ↵ install / sign in · ^r refresh · esc close",
         Tab::Connectors => "tab switch · ↵ add / sign in · ^x remove · ^r refresh · esc",
-        Tab::Skills => "tab switch · ↵ install · ^x remove · esc close",
+        Tab::Skills => "tab switch · ↵ details · ^x remove · esc close",
     };
     let loading = m.loading && m.tab == Tab::Connectors && !rows.is_empty();
     footer(buf, inner, m.error.as_deref().or(loading.then_some("Loading the registry…")), keys);
@@ -265,6 +272,8 @@ pub fn agent(buf: &mut Buffer, area: Rect, app: &App, a: &AgentSetup) {
         } else {
             "Working…".into()
         }
+    } else if signed_in != Some(true) && b.is_some_and(|b| b["node"] == "missing") {
+        "Add Node.js first.".into()
     } else {
         match signed_in {
             Some(true) => "Signed in.".into(),
@@ -289,6 +298,9 @@ pub fn agent(buf: &mut Buffer, area: Rect, app: &App, a: &AgentSetup) {
         let base = row(buf, inner, y, i == a.cursor);
         let (icon, title, detail) = match rw {
             SetupRow::Install => ("↓", "Install".to_owned(), format!("Runs the official installer on {}.", app.host)),
+            SetupRow::Node => {
+                ("↓", "Add Node.js".to_owned(), format!("{name} runs on Node.js. Codync adds its own copy."))
+            }
             SetupRow::Login => ("›_", "Sign in".to_owned(), format!("In a terminal on {}.", app.host)),
             SetupRow::Method(m) => {
                 let (icon, fallback) = match s(m, "kind") {

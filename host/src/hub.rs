@@ -119,6 +119,7 @@ impl Hub {
         // Approval cards and queued sends from a previous run can't be honored anymore.
         self.store.expire_pending()?;
         self.routines.restore(&self.store)?;
+        crate::market::turn_on_installed_once(&self.store)?;
         for row in self.store.bots()? {
             if row.deleted {
                 self.routines.disable_bot(&self.store, &row.config.id)?;
@@ -228,6 +229,10 @@ impl Hub {
         // A name the user picked ends automatic naming; the namer passes `autoName` itself.
         if cfg.name != row.config.name && patch.get("autoName").is_none() {
             cfg.auto_name = false;
+        }
+        // Options belong to one model; an app that doesn't know them can't clear them itself.
+        if (cfg.model != row.config.model || cfg.backend != row.config.backend) && patch.get("modelOptions").is_none() {
+            cfg.model_options.clear();
         }
         if cfg.kind != row.config.kind {
             bail!("a bot can't become a group, or a group a bot");

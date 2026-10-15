@@ -21,6 +21,8 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
     /// `ask` or `auto`.
     public var permission: String
     public var model: String?
+    /// The model's own settings (effort, fast…): agent option id → value.
+    public var modelOptions: [String: String] = [:]
     /// The agent's Fast mode (Claude Code, Codex): faster replies for more usage.
     public var fastMode: Bool = false
     /// What the agent says about Fast mode: `unknown` (no session yet), `offered`, `unsupported`,
@@ -219,6 +221,12 @@ public struct Backend: Codable, Hashable, Sendable, Identifiable {
     /// Missing when the host can't tell.
     public var signedIn: Bool?
     public var canInstall: Bool?
+    /// Only for an agent that runs on Node.js, on a computer without its own: Codync's copy
+    /// is `missing` or `added`.
+    public var node: String?
+
+    /// It can't run until Node.js is added to the computer.
+    public var needsNode: Bool { node == "missing" }
 }
 
 /// How an agent can be signed in, from asking the agent itself.
@@ -260,7 +268,7 @@ public struct AuthMethod: Decodable, Sendable, Identifiable, Hashable {
 
 /// What a setup terminal on the computer runs.
 public enum SetupStep: String, Codable, Sendable {
-    case install, login
+    case install, node, login
 }
 
 public struct Hello: Codable, Sendable {
@@ -285,14 +293,6 @@ public struct Hello: Codable, Sendable {
     public var minApp: String?
     /// The cloud relay the host uses; nil = cloud off.
     public var cloud: String?
-}
-
-public struct SyncResponse: Codable, Sendable {
-    public var hostId: String
-    public var rev: Int64
-    public var bots: [Bot]
-    public var entries: [Entry]
-    public var usage: Usage
 }
 
 public struct DirListing: Codable, Sendable {
@@ -346,6 +346,7 @@ public struct BotDraft: Codable, Hashable, Sendable {
     public var cwd: String
     public var permission: String
     public var model: String?
+    public var modelOptions: [String: String] = [:]
     public var fastMode: Bool?
     public var pinned: Bool?
     public var hidden: Bool?
@@ -377,6 +378,7 @@ public struct BotDraft: Codable, Hashable, Sendable {
         cwd = bot.managedWorkspace ? "" : bot.cwd
         permission = bot.permission
         model = bot.model
+        modelOptions = bot.modelOptions
         fastMode = bot.fastMode
         pinned = bot.pinned
         hidden = bot.hidden
@@ -408,6 +410,7 @@ extension Bot {
         managedWorkspace = try c.decodeIfPresent(Bool.self, forKey: .managedWorkspace) ?? false
         permission = try c.decodeIfPresent(String.self, forKey: .permission) ?? "auto"
         model = try c.decodeIfPresent(String.self, forKey: .model)
+        modelOptions = try c.decodeIfPresent([String: String].self, forKey: .modelOptions) ?? [:]
         fastMode = try c.decodeIfPresent(Bool.self, forKey: .fastMode) ?? false
         fastModeSupport = try c.decodeIfPresent(String.self, forKey: .fastModeSupport) ?? "unknown"
         fastModeIssue = try c.decodeIfPresent(String.self, forKey: .fastModeIssue)

@@ -6,11 +6,11 @@
 // Drawing code reads best with x / y / w / t (theme) / r (rect).
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
 
+mod analytics;
 mod bot_chat;
 mod buffer;
 mod chat;
 mod computer_access;
-mod consent;
 mod forms;
 mod goto;
 mod help;
@@ -18,6 +18,7 @@ mod overlay;
 mod pair;
 mod permission;
 mod roster;
+mod skill;
 mod style;
 mod time;
 mod trace;

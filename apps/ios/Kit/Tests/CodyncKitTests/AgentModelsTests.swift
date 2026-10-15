@@ -23,6 +23,17 @@ import Testing
     #expect(selected["model"] as? String == "agent-model")
 }
 
+@Test func modelOptionsDecodeAndRoundTripThroughDrafts() throws {
+    let data = Data(#"{"models":[{"id":"grok-4.7","name":"Grok 4.7","options":[{"id":"fast","name":"Fast","default":"true","values":[{"id":"false","name":"Off"},{"id":"true","name":"On"}]}]},{"id":"old","name":"Old host"}]}"#.utf8)
+    let catalog = try JSONDecoder().decode(AgentModels.self, from: data)
+    #expect(catalog.models.first?.options?.first?.values.map(\.name) == ["Off", "On"])
+    #expect(catalog.models.last?.options == nil)
+    let bot = try JSONDecoder().decode(Bot.self, from: Data(#"{"id":"b","modelOptions":{"fast":"false"}}"#.utf8))
+    #expect(bot.modelOptions == ["fast": "false"])
+    let body = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(BotUpdate(draft: BotDraft(bot)))) as? [String: Any])
+    #expect(body["modelOptions"] as? [String: String] == ["fast": "false"])
+}
+
 @Test func modelCatalogReportsFastModeAndOlderHostsOmitIt() throws {
     let offered = try JSONDecoder().decode(AgentModels.self, from: Data(#"{"models":[],"fastMode":true}"#.utf8))
     #expect(offered.fastMode == true)

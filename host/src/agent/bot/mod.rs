@@ -152,7 +152,7 @@ pub fn spawn(hub: Arc<Hub>, cfg: BotConfig) -> BotHandle {
         stop_requested: false,
         cancel_deadline: None,
         exit_tail: None,
-        reload_sessions: false,
+        tools_changed: false,
         fast_support,
     };
     let task = tokio::spawn(actor.run(rx, interrupted));
@@ -247,9 +247,9 @@ struct Actor {
     cancel_deadline: Option<Instant>,
     /// Last stderr lines of an agent process that just exited.
     exit_tail: Option<String>,
-    /// Connectors or computer use changed: restart the agent before the next turn so
-    /// its sessions are resumed with the new MCP servers.
-    reload_sessions: bool,
+    /// Connectors changed: restart the agent before the next turn so the
+    /// session is resumed with the new MCP servers.
+    tools_changed: bool,
     /// What the agent says about Fast mode; clients see it in the bot's runtime.
     fast_support: FastModeSupport,
 }

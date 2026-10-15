@@ -2,7 +2,6 @@
 
 use super::{Actor, Conn, NoticeStyle, SessionCaps};
 use crate::agent::acp::{self, Acp, Incoming};
-use crate::agent::config::model_config;
 use crate::chat::context;
 use crate::store::{BotConfig, Entry, EntryKind, Lane, lane_key};
 use anyhow::{Result, anyhow, bail};
@@ -144,7 +143,7 @@ impl Actor {
             crate::market::vault::unlock(self.hub.clone()).await?;
         }
         // An agent that can't resume keeps its session; its next new session gets the new tools.
-        if std::mem::take(&mut self.reload_sessions)
+        if std::mem::take(&mut self.tools_changed)
             && self.conn.as_ref().is_some_and(|c| c.sessions.load)
             && let Some(c) = self.conn.take()
         {
@@ -246,9 +245,16 @@ impl Actor {
                 }
             }
             match res {
-                Ok(loaded) => {
+                Ok(res) => {
+                    // A resumed session can come back on the agent's last-used model (Cursor
+                    // keeps one for all its sessions), so the bot's own is set again.
+                    let res = if res.get("configOptions").is_some() || res.get("models").is_some() {
+                        select_model(&conn.acp, &res, &sid, &self.cfg).await?
+                    } else {
+                        res
+                    };
                     conn.loaded.insert(sid.clone());
-                    self.note_options(&sid, &loaded, false);
+                    self.note_options(&sid, &res, false);
                     if let Some(s) = snapshot {
                         // Its system prompt now names the bot as rendered.
                         context::mark_announced(&self.hub.store, &self.cfg.id, &s, s.system_identity.clone())?;
@@ -301,7 +307,8 @@ impl Actor {
         if let Some(c) = self.conn.take() {
             c.acp.kill().await;
         }
-        bail!("the agent didn't answer {method} within {}s", SESSION_TIMEOUT.as_secs())
+        let message = format!("the agent didn't answer {method} within {}s", SESSION_TIMEOUT.as_secs());
+        Err(acp::Failure::error(acp::FailureKind::Timeout, message))
     }
 
     /// Memory failed to start: said once per actor, then the bot works without it.
@@ -342,25 +349,48 @@ pub(crate) async fn launch_commands(cfg: &BotConfig, progress: impl Fn(&str)) ->
     })
 }
 
-/// Switches a new session (`session/new` answered `res`) to the bot's chosen model.
-/// Returns the answer holding the session's config options now: a model can change them.
+/// Switches a session (`session/new` or `session/load` answered `res`) to the bot's
+/// chosen model, then sets that model's options (effort, fast…). Returns the answer holding
+/// the session's config options now: a model can change them.
 pub(crate) async fn select_model(acp: &Acp, res: &Value, sid: &str, cfg: &BotConfig) -> Result<Value> {
     let Some(model) = cfg.model.as_deref().filter(|m| !m.is_empty()) else { return Ok(res.clone()) };
-    let r = match model_config(res).and_then(|c| c["id"].as_str()) {
-        Some(config_id) => {
-            acp.request("session/set_config_option", json!({"sessionId": sid, "configId": config_id, "value": model}))
-                .await
-        }
-        None => acp.request("session/set_model", json!({"sessionId": sid, "modelId": model})).await,
+    let Some(config_id) = crate::agent::auth::model_config(res).and_then(|c| c["id"].as_str()) else {
+        let r = acp.request("session/set_model", json!({"sessionId": sid, "modelId": model})).await;
+        return r.map(|_| res.clone()).map_err(|e| model_error(model, &e));
     };
-    match r {
-        Ok(switched) if switched["configOptions"].is_array() => Ok(switched),
-        Ok(_) => Ok(res.clone()),
-        Err(e) => {
-            tracing::warn!(model, error = format!("{e:#}"), "couldn't set model");
-            bail!("Couldn't select model {model}: {e:#}");
+    let (model, mut options) = split_variant(res, model);
+    options.extend(cfg.model_options.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+    let set = |id: &str, value: &str| {
+        acp.request("session/set_config_option", json!({"sessionId": sid, "configId": id, "value": value}))
+    };
+    let mut current = set(config_id, model).await.map_err(|e| model_error(model, &e))?;
+    for (id, value) in options {
+        let answer = set(id, value).await.map_err(|e| model_error(&format!("{model} with {id}={value}"), &e))?;
+        if answer["configOptions"].is_array() {
+            current = answer;
         }
     }
+    Ok(if current["configOptions"].is_array() { current } else { res.clone() })
+}
+
+fn model_error(model: &str, e: &anyhow::Error) -> anyhow::Error {
+    tracing::warn!(model, error = format!("{e:#}"), "couldn't set model");
+    anyhow!("Couldn't select model {model}: {e:#}")
+}
+
+/// Cursor names a model variant `grok-4.7[reasoning_effort=high,fast=true]`. When the agent
+/// lists plain models instead, the bracket becomes options of the plain model.
+fn split_variant<'a>(res: &Value, model: &'a str) -> (&'a str, Vec<(&'a str, &'a str)>) {
+    let listed = |id: &str| crate::agent::auth::model_ids(res).iter().any(|m| m == id);
+    if let Some((name, params)) = model.strip_suffix(']').and_then(|m| m.split_once('['))
+        && let Some(params) =
+            params.split(',').filter(|p| !p.is_empty()).map(|p| p.split_once('=')).collect::<Option<Vec<_>>>()
+        && !listed(model)
+        && listed(name)
+    {
+        return (name, params);
+    }
+    (model, Vec::new())
 }
 
 /// Spawns an ACP agent and completes the `initialize` handshake.
@@ -373,10 +403,13 @@ pub(crate) async fn start_agent(command: &str, cwd: &str, env: &[(String, String
             json!({
                 "protocolVersion": 1,
                 // `session.compaction`: tell us when the agent summarizes its context.
+                // `parameterizedModelPicker`: Cursor lists plain models with their options
+                // (effort, fast…) instead of one fixed variant each; model discovery asks the same.
                 "clientCapabilities": {
                     "fs": {"readTextFile": false, "writeTextFile": false},
                     "terminal": false,
                     "session": {"compaction": {}},
+                    "_meta": {"parameterizedModelPicker": true},
                 },
                 "clientInfo": {"name": "codync", "title": "Codync", "version": env!("CARGO_PKG_VERSION")},
             }),
@@ -391,7 +424,8 @@ pub(crate) async fn start_agent(command: &str, cwd: &str, env: &[(String, String
         }
         Err(_) => {
             acp.kill().await;
-            return Err(anyhow!("the agent didn't answer the ACP handshake within {}s", budget.as_secs()));
+            let message = format!("the agent didn't answer the ACP handshake within {}s", budget.as_secs());
+            return Err(acp::Failure::error(acp::FailureKind::Timeout, message));
         }
     };
     let sessions = SessionCaps {
@@ -400,4 +434,30 @@ pub(crate) async fn start_agent(command: &str, cwd: &str, env: &[(String, String
     };
     let claude = init["agentCapabilities"]["_meta"]["claudeCode"].is_object();
     Ok(Conn { acp, rx, sessions, claude, loaded: HashSet::new(), fast_options: HashMap::new() })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn variant_ids_become_options_only_when_the_agent_lists_plain_models() {
+        let plain = json!({"configOptions": [{"id": "model", "category": "model", "type": "select",
+            "options": [{"value": "grok-4.7"}]}]});
+        let variant = "grok-4.7[context=256k,reasoning_effort=medium,fast=false]";
+        assert_eq!(
+            split_variant(&plain, variant),
+            ("grok-4.7", vec![("context", "256k"), ("reasoning_effort", "medium"), ("fast", "false")])
+        );
+        assert_eq!(split_variant(&plain, "grok-4.7"), ("grok-4.7", vec![]));
+        let variants = json!({"configOptions": [{"id": "model", "category": "model", "type": "select",
+            "options": [{"value": variant}]}]});
+        assert_eq!(split_variant(&variants, variant), (variant, vec![]));
+        assert_eq!(split_variant(&plain, "other[x=1]"), ("other[x=1]", vec![]));
+        // Claude's `opus[1m]` is a model id of its own, not a variant.
+        assert_eq!(split_variant(&json!({"models": {"availableModels": [{"modelId": "opus"}]}}), "opus[1m]").1, vec![]);
+        // Cursor's Auto: `default[]` with variants, `default` without.
+        let auto = json!({"models": {"availableModels": [{"modelId": "default"}]}});
+        assert_eq!(split_variant(&auto, "default[]"), ("default", vec![]));
+    }
 }

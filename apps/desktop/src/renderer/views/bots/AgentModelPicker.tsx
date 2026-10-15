@@ -3,12 +3,14 @@ import { ChoicePicker, IconButton, Pill, Spinner } from '../../components/Contro
 import { font } from '../../lib/fonts'
 import type { AgentModelsState } from './agent-models'
 
-/** The bot's model, from the list `useAgentModels` loaded for its agent. */
-export function AgentModelPicker({ backend, models, selection, onChange }: {
+/** The bot's model and its options, from the list `useAgentModels` loaded for its agent. */
+export function AgentModelPicker({ backend, models, selection, onChange, options: chosen, onOptionsChange }: {
   backend: string
   models: AgentModelsState
   selection: string | null | undefined
   onChange: (model: string | null) => void
+  options: Record<string, string>
+  onOptionsChange: (options: Record<string, string>) => void
 }) {
   const { catalog, loading, failure } = models
   const custom = backend === 'custom'
@@ -31,6 +33,11 @@ export function AgentModelPicker({ backend, models, selection, onChange }: {
   const value = selection === agentDefault?.id ? '' : (selection ?? '')
   const set = (v: string) => onChange(v ? v : null)
   const empty = catalog?.models.length === 0
+  const modelOptions = available.find((m) => m.id === value)?.options ?? []
+  const setOption = (id: string, v: string) => {
+    const { [id]: _, ...rest } = chosen
+    onOptionsChange(v ? { ...rest, [id]: v } : rest)
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -62,6 +69,17 @@ export function AgentModelPicker({ backend, models, selection, onChange }: {
           )}
         </div>
       </div>
+      {modelOptions.map((o) => {
+        const fallback = o.values.find((v) => v.id === o.default)?.name
+        const choices = [{ id: '', label: fallback ? `Default · ${fallback}` : 'Default' }, ...o.values.map((v) => ({ id: v.id, label: v.name }))]
+        return (
+          <div key={o.id} className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: 'var(--text)', whiteSpace: 'nowrap' }}>{o.name}</span>
+            <span style={{ flex: 1 }} />
+            <ChoicePicker selection={chosen[o.id] ?? ''} options={choices} onChange={(v) => setOption(o.id, v)} />
+          </div>
+        )
+      })}
       {!custom && !loading && failure ? (
         <span style={{ ...font('caption'), color: 'var(--warning)' }}>{failure}</span>
       ) : !custom && !loading && empty ? (

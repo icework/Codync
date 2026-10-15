@@ -7,6 +7,8 @@ import SwiftUI
 struct AgentModelPicker: View {
     let backend: String
     @Binding var selection: String?
+    /// The selected model's settings (effort, fast…); they belong to one model.
+    @Binding var options: [String: String]
     @Binding var fastMode: Bool
     /// The saved bot: whether its own sessions offer Fast mode, and why the agent refused it.
     var bot: Bot?
@@ -28,7 +30,7 @@ struct AgentModelPicker: View {
         catalog?.models.first { $0.name.lowercased().hasPrefix("default") }
     }
 
-    private var options: [(String, String)] {
+    private var modelChoices: [(String, String)] {
         let available = (catalog?.models ?? []).filter { $0.id != agentDefault?.id }
         let current = available.first { $0.id == catalog?.currentModelId }?.name
         var result = [("", agentDefault?.name ?? current.map { "Default · \($0)" } ?? "Default")]
@@ -43,8 +45,27 @@ struct AgentModelPicker: View {
     private var value: Binding<String> {
         Binding(
             get: { selection == agentDefault?.id ? "" : selection ?? "" },
-            set: { selection = $0.isEmpty ? nil : $0 }
+            set: {
+                let model = $0.isEmpty ? nil : $0
+                guard model != selection else { return }
+                selection = model
+                options = [:]
+            }
         )
+    }
+
+    /// Settings the selected model offers.
+    private var modelOptions: [AgentModels.Option] {
+        catalog?.models.first { $0.id == value.wrappedValue }?.options ?? []
+    }
+
+    private func optionValue(_ id: String) -> Binding<String> {
+        Binding(get: { options[id] ?? "" }, set: { options[id] = $0.isEmpty ? nil : $0 })
+    }
+
+    private func choices(_ option: AgentModels.Option) -> [(String, String)] {
+        let fallback = option.values.first { $0.id == option.default }?.name
+        return [("", fallback.map { "Default · \($0)" } ?? "Default")] + option.values.map { ($0.id, $0.name) }
     }
 
     private var showsFastMode: Bool {
@@ -54,7 +75,10 @@ struct AgentModelPicker: View {
 
     var body: some View {
         modelRow
-            .onChange(of: backend) { _, _ in selection = nil }
+            .onChange(of: backend) { _, _ in
+                selection = nil
+                options = [:]
+            }
             .task(id: requestKey) { await load() }
         if showsFastMode {
             SwitchRow("Fast mode", detail: bot?.fastModeRefusal ?? "Faster replies for more usage, on models that offer it.",
@@ -80,9 +104,19 @@ struct AgentModelPicker: View {
                             .frame(minWidth: 0, maxWidth: 180)
                             .outlinedPill()
                     } else {
-                        ChoicePicker(selection: value, options: options, fitsAvailableWidth: true)
+                        ChoicePicker(selection: value, options: modelChoices, fitsAvailableWidth: true)
                     }
                 }
+            }
+            ForEach(modelOptions) { option in
+                HStack(spacing: 8) {
+                    Text(option.name)
+                        .foregroundStyle(Palette.text)
+                        .fixedSize()
+                    Spacer(minLength: 0)
+                    ChoicePicker(selection: optionValue(option.id), options: choices(option), fitsAvailableWidth: true)
+                }
+                .transition(.opacity)
             }
             if backend != "custom", !loading {
                 if let failure {
@@ -99,6 +133,7 @@ struct AgentModelPicker: View {
                 .font(.caption)
                 .foregroundStyle(Palette.secondary)
         }
+        .animation(Motion.reduced(Motion.fade, reduceMotion), value: modelOptions.map(\.id))
     }
 
     /// Loading and refresh share one fixed slot, so the row never grows for loading.

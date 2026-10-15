@@ -1,9 +1,14 @@
+import { execFile } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron'
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { app, BrowserWindow, ipcMain, powerMonitor, shell } from 'electron'
 import electronUpdater, { type UpdateInfo } from 'electron-updater'
 import { isBelow, parseVersion } from '../shared/compat'
 import type { UpdateState } from '../shared/ipc'
 import { isMainEnvironment } from './account'
+import { identity } from './environment'
 import { prefs, type HostController } from './host-controller'
 
 const { autoUpdater } = electronUpdater
@@ -19,10 +24,11 @@ const enabled = app.isPackaged && isMainEnvironment()
 export class Updates extends EventEmitter {
   state: UpdateState = {
     supported: enabled,
-    canCheck: enabled,
     checking: false,
     availableVersion: null,
+    downloadPercent: null,
     staged: false,
+    installing: false,
     autoCheck: prefs.get('updatesAutoCheck') !== false,
     // On unless turned off: installs still wait until Codync is idle.
     autoDownload: prefs.get('updatesAutoDownload') !== false,
@@ -33,7 +39,6 @@ export class Updates extends EventEmitter {
   private userInitiated = false
   private preparing: Promise<boolean> | null = null
   private prepared = false
-  private installing = false
   private updateGeneration = 0
   private appStoreVersion: string | null = null
 
@@ -51,17 +56,28 @@ export class Updates extends EventEmitter {
     this.on('change', () => {
       for (const w of windows()) w.webContents.send('updates:change', this.state)
     })
+    removeStuckShipIt()
     if (!enabled) return
+    // macOS relaunches the updated app from the background, behind the app in front, and ignores
+    // `app.focus` there (cooperative activation); opening its own bundle brings it forward.
+    if (prefs.get('updateRelaunchInFront') === true) {
+      prefs.set('updateRelaunchInFront', false)
+      if (process.platform === 'darwin') void shell.openPath(join(app.getPath('exe'), '../../..'))
+    }
 
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = true
     autoUpdater.on('checking-for-update', () => this.set({ checking: true, error: null }))
     autoUpdater.on('update-not-available', () => this.checked({ availableVersion: null }))
     autoUpdater.on('update-available', (info) => void this.available(info))
+    autoUpdater.on('download-progress', ({ percent }) => {
+      const rounded = Math.floor(percent)
+      if (this.state.downloadPercent !== null && rounded !== this.state.downloadPercent) this.set({ downloadPercent: rounded })
+    })
+    // Ready to install: the person restarts from the Updates page, or it installs once idle.
     autoUpdater.on('update-downloaded', (info) => {
-      this.set({ staged: true, availableVersion: info.version })
-      if (this.userInitiated) void this.install()
-      else this.installWhenIdle()
+      this.set({ staged: true, downloadPercent: null, availableVersion: info.version })
+      this.installWhenIdle()
     })
     autoUpdater.on('error', (error) => this.failed(error))
 
@@ -73,7 +89,10 @@ export class Updates extends EventEmitter {
     })
 
     setTimeout(() => this.scheduled(), 30_000)
-    setInterval(() => this.scheduled(), 3600_000)
+    setInterval(() => {
+      removeStuckShipIt()
+      this.scheduled()
+    }, 3600_000)
   }
 
   setAutoCheck(on: boolean) {
@@ -99,14 +118,14 @@ export class Updates extends EventEmitter {
 
   private failed(error: unknown) {
     this.updateGeneration++
-    this.installing = false
+    prefs.set('updateRelaunchInFront', false)
     // A preparation still stopping the host restores it after stop completes.
     if (this.prepared) {
       this.prepared = false
       this.host.resumeAfterCancelledUpdate()
     }
     const message = error instanceof Error ? error.message : String(error)
-    this.checked({ error: this.userInitiated || this.state.staged ? message : null })
+    this.checked({ downloadPercent: null, installing: false, error: this.userInitiated || this.state.staged ? message : null })
     this.userInitiated = false
   }
 
@@ -119,9 +138,11 @@ export class Updates extends EventEmitter {
     void autoUpdater.checkForUpdates().catch(() => {})
   }
 
+  /** Checks, downloads, or once a release is staged, restarts into it. */
   check() {
     if (!enabled) return
-    if (this.state.staged) return void this.install()
+    if (this.state.staged) return void this.install(true)
+    if (this.state.downloadPercent !== null) return
     this.userInitiated = true
     this.set({ error: null })
     void autoUpdater.checkForUpdates().catch(() => {})
@@ -149,7 +170,10 @@ export class Updates extends EventEmitter {
       this.userInitiated = false
       return
     }
-    if (this.userInitiated || this.state.autoDownload) void autoUpdater.downloadUpdate().catch(() => {})
+    if (this.userInitiated || this.state.autoDownload) {
+      this.set({ downloadPercent: 0 })
+      void autoUpdater.downloadUpdate().catch(() => {})
+    }
   }
 
   /** The local host's `minApp` and whether an iPhone is paired with it. */
@@ -172,7 +196,7 @@ export class Updates extends EventEmitter {
       if (!this.state.autoDownload || BrowserWindow.getFocusedWindow() || powerMonitor.getSystemIdleTime() < 600) return
       if (!(await this.host.isIdleForUpdate())) return
       clearInterval(timer)
-      void this.install()
+      void this.install(false)
     }, 30_000)
   }
 
@@ -200,16 +224,34 @@ export class Updates extends EventEmitter {
     return this.preparing
   }
 
-  private async install() {
-    if (this.installing) return
-    this.installing = true
+  /** `inFront`: the person chose to restart, so the relaunched app comes forward. */
+  private async install(inFront: boolean) {
+    if (this.state.installing) return
+    this.set({ installing: true })
     try {
-      if (await this.prepare()) autoUpdater.quitAndInstall(true, true)
-      else this.installing = false
+      if (!(await this.prepare())) return this.set({ installing: false })
+      if (inFront) prefs.set('updateRelaunchInFront', true)
+      autoUpdater.quitAndInstall(true, true)
     } catch (error) {
       this.failed(error)
     }
   }
+}
+
+/**
+ * macOS's installer job (Squirrel's ShipIt) restarts every 2 s until it exits cleanly, so once its
+ * update request is gone (a cleaned Caches folder) it fails forever and its log grows without
+ * bound. An idle job without a request can't install anything: remove it.
+ */
+function removeStuckShipIt() {
+  if (process.platform !== 'darwin') return
+  const label = `${identity.appId}.ShipIt`
+  if (existsSync(join(homedir(), 'Library/Caches', label, 'ShipItState.plist'))) return
+  execFile('/bin/launchctl', ['list', label], (error, stdout) => {
+    // Not submitted, or running right now (the next check finds it idle).
+    if (error || stdout.includes('"PID" =')) return
+    execFile('/bin/launchctl', ['remove', label], () => {})
+  })
 }
 
 /** The iPhone app's version live in the App Store (iTunes lookup); null when unknown. */

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { UpdateState } from '@shared/ipc'
-import { Button, CardForm, CardSection, ChoicePicker, IconButton, Switch, ValueRow } from '../../components/Controls'
+import { islandLabel } from '@shared/island'
+import { Button, CardForm, CardSection, ChoicePicker, IconButton, ProgressBar, Switch, ValueRow } from '../../components/Controls'
 import { Icon } from '../../components/Icon'
 import { useDismiss } from '../../components/Overlay'
 import { font } from '../../lib/fonts'
@@ -9,11 +9,14 @@ import { DEFAULT_TEXT_SIZE, prefs, TEXT_SIZES, usePref } from '../../lib/prefs'
 import { useAccount } from '../../store/account'
 import { StoreContext, useApp } from '../../store/context'
 import { ComputerBadge } from '../ComputerBadge'
+import { UpdateButton, useUpdates } from '../UpdateButton'
 import { ComputersView } from './ComputersView'
 import { errorText, isMac, thisMac } from './parts'
 import { UsageLimits } from './UsageLimits'
 import { VoiceChatSettingsView } from './VoiceChatSettingsView'
 import { ComputerAccessView } from '../computer-access/ComputerAccessView'
+import { FormSheet } from '../marketplace/pieces'
+import { AnalyticsSheet } from './AnalyticsSheet'
 
 /** The chat window's Settings: pages in a sidebar, ChatGPT's settings layout. */
 export type SettingsPage = 'general' | 'computers' | 'access' | 'voice' | 'usage' | 'updates'
@@ -108,6 +111,8 @@ function GeneralSettings() {
   useEffect(() => void window.codync.app.showInDock().then(setShowInDock), [])
   const [launchAtLogin, setLaunchAtLogin] = useState(false)
   useEffect(() => void window.codync.app.launchAtLogin().then(setLaunchAtLogin), [])
+  const [island, setIsland] = useState(false)
+  useEffect(() => void window.codync.island.enabled().then(setIsland), [])
 
   return (
     <CardForm>
@@ -155,6 +160,11 @@ function GeneralSettings() {
       </CardSection>
       <CardSection title="System">
         {window.codync.platform === 'darwin' ? <Switch on={showInDock} onChange={(on) => void window.codync.app.setShowInDock(on).then(setShowInDock)}>Show in Dock</Switch> : null}
+        {window.codync.island.supported ? (
+          <Switch on={island} onChange={(on) => void window.codync.island.setEnabled(on).then(setIsland)}>
+            {islandLabel(window.codync.platform)}
+          </Switch>
+        ) : null}
         <Switch on={launchAtLogin} onChange={(on) => void window.codync.app.setLaunchAtLogin(on).then(setLaunchAtLogin)}>
           Open at login
         </Switch>
@@ -169,13 +179,21 @@ function PrivacySettings() {
   const app = useApp()
   const local = useModel(app.local)
   const running = local !== null && local.connection.kind === 'online'
+  const [about, setAbout] = useState(false)
   const setShared = (on: boolean) => void local?.setAnalytics(on).catch((e: unknown) => app.setError(errorText(e)))
   return (
-    <CardSection title="Privacy" footer="Which features you use, never your messages, code or files. Private, used only to improve Codync.">
-      <Switch on={local?.analytics === true} onChange={setShared} disabled={!running}>
-        Share usage analytics
-      </Switch>
-    </CardSection>
+    <>
+      <CardSection title="Privacy" footer="Which features you use, never your messages, code or files. Helps us spot bugs sooner and make Codync better for you.">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ opacity: running ? 1 : 0.4 }}>Share usage analytics</span>
+          <IconButton title="About usage analytics" icon="info.circle" onClick={() => setAbout(true)} />
+          <Switch on={local?.analytics === true} onChange={setShared} disabled={!running} label="Share usage analytics" style={{ flex: 1, justifyContent: 'flex-end' }} />
+        </div>
+      </CardSection>
+      <FormSheet open={about} onClose={() => setAbout(false)}>
+        <AnalyticsSheet />
+      </FormSheet>
+    </>
   )
 }
 
@@ -202,11 +220,7 @@ function UsageLimitsList() {
 
 /** The app's update check and preferences, the same as the menu bar's Updates menu. */
 function UpdateSettings() {
-  const [updates, setUpdates] = useState<UpdateState | null>(null)
-  useEffect(() => {
-    void window.codync.updates.state().then(setUpdates)
-    return window.codync.updates.onChange(setUpdates)
-  }, [])
+  const updates = useUpdates()
   if (!updates) return null
   const footer = !updates.supported
     ? 'Updates are available in release builds.'
@@ -223,11 +237,16 @@ function UpdateSettings() {
           <ValueRow key="version" label="Version" detail={lastChecked}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span>{window.codync.appVersion}</span>
-              <Button kind="secondary" onClick={() => window.codync.updates.check()} disabled={!updates.canCheck && !updates.staged}>
-                {updates.availableVersion ? `Update to ${updates.availableVersion}` : 'Check for updates'}
-              </Button>
+              <UpdateButton updates={updates} />
             </span>
           </ValueRow>,
+          ...(updates.downloadPercent !== null
+            ? [
+                <div key="progress" className="settings-row settings-appear">
+                  <ProgressBar value={updates.downloadPercent / 100} label={`Downloading Codync ${updates.availableVersion ?? ''}`} />
+                </div>,
+              ]
+            : []),
           <Switch key="check" on={updates.autoCheck} onChange={(on) => window.codync.updates.setAutoCheck(on)} disabled={!updates.supported}>
             Automatically check for updates
           </Switch>,

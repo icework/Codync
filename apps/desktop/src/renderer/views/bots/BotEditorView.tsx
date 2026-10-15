@@ -11,6 +11,8 @@ import { useStore } from '../../store/context'
 import { useAgentModels } from './agent-models'
 import { AgentModelPicker } from './AgentModelPicker'
 import { errorText, fillDefaults, isValid, lastPathComponent, normalized, usePlugins, type Plugins } from './drafts'
+import { FormSheet } from '../marketplace/pieces'
+import { SkillSheet, type SkillRef } from '../marketplace/SkillSheet'
 import { MemoryCard } from './MemoryView'
 import { AnchoredPanel, AutoTextArea, Field, SwitchRow } from './parts'
 import './bots.css'
@@ -21,14 +23,14 @@ export function BotEditorView({ draft: initial }: { draft: BotDraft }) {
   const dismiss = useDismiss()
   const plugins = usePlugins(store)
   const isNew = !initial.id
-  const [draft, setDraft] = useState(() => (isNew ? fillDefaults(store, initial, []) : initial))
+  const [draft, setDraft] = useState(() => (isNew ? fillDefaults(store, initial, { connectors: [], skills: [] }) : initial))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const online = store.connection.kind === 'online'
 
-  // A new bot's connectors start on once the computer has listed them.
+  // A new bot's connectors and skills start on once the computer has listed them.
   useEffect(() => {
-    if (isNew && plugins) setDraft((d) => fillDefaults(store, d, plugins.connectors))
+    if (isNew && plugins) setDraft((d) => fillDefaults(store, d, plugins))
   }, [isNew, plugins, store])
 
   const save = () => {
@@ -98,9 +100,12 @@ function BotSettingsForm({ draft, onChange, error, plugins }: {
   const store = useStore()
   const [pickingAvatar, setPickingAvatar] = useState(false)
   const [pickingFolder, setPickingFolder] = useState(false)
+  const [viewingSkill, setViewingSkill] = useState<SkillRef | null>(null)
   const avatarRef = useRef<HTMLButtonElement>(null)
   const set = <K extends keyof BotDraft>(key: K, value: BotDraft[K]) => onChange((d) => ({ ...d, [key]: value }))
-  const setModel = useCallback((model: string | null) => onChange((d) => ({ ...d, model })), [onChange])
+  // Options belong to one model.
+  const setModel = useCallback((model: string | null) => onChange((d) => (d.model === model ? d : { ...d, model, modelOptions: {} })), [onChange])
+  const setModelOptions = useCallback((modelOptions: Record<string, string>) => onChange((d) => ({ ...d, modelOptions })), [onChange])
   const models = useAgentModels(draft.backend)
   const saved = draft.id ? (store.bots.get(draft.id) ?? null) : null
 
@@ -159,7 +164,7 @@ function BotSettingsForm({ draft, onChange, error, plugins }: {
               />
             ) : null}
           </div>
-          <AgentModelPicker backend={draft.backend} models={models} selection={draft.model} onChange={setModel} />
+          <AgentModelPicker backend={draft.backend} models={models} selection={draft.model} onChange={setModel} options={draft.modelOptions ?? {}} onOptionsChange={setModelOptions} />
           {(draft.backend !== 'custom' && models.catalog?.fastMode) || draft.fastMode || (saved?.backend === draft.backend && fastModeShown(saved)) ? (
             // Shown while the agent offers it (its model list, or the bot's own sessions), or while it's on.
             <div className="fade-in">
@@ -233,22 +238,26 @@ function BotSettingsForm({ draft, onChange, error, plugins }: {
 
         <PluginToggles
           title="Connectors"
-          empty="No connectors yet. Add GitHub, Linear, Notion and more from Plugins."
+          empty="No connectors yet. Add GitHub, Linear, Notion and more from Extensions."
           items={connectors.map((c) => ({ id: c.id, name: c.name, detail: c.command ?? c.url ?? '' }))}
           selection={draft.connectors ?? []}
           onChange={(ids) => set('connectors', ids)}
         />
         <PluginToggles
           title="Skills"
-          empty="No skills yet. Get some from Plugins, or write your own."
+          empty="No skills yet. Get some from Extensions, or write your own."
           items={skills.map((s) => ({ id: s.id, name: s.name, detail: s.description }))}
           selection={draft.skills ?? []}
           onChange={(ids) => set('skills', ids)}
+          onInfo={(s) => setViewingSkill({ id: s.id, name: s.name, description: s.detail })}
         />
         {draft.id ? <MemoryCard botId={draft.id} /> : null}
 
         {error ? <span className="fade-in" style={{ ...font('footnote'), color: 'var(--danger)' }}>{error}</span> : null}
       </div>
+      <FormSheet open={viewingSkill !== null} onClose={() => setViewingSkill(null)}>
+        {viewingSkill ? <SkillSheet key={viewingSkill.name} skill={viewingSkill} /> : null}
+      </FormSheet>
       <Sheet open={pickingFolder} onClose={() => setPickingFolder(false)} width={460} height={520}>
         <FolderPicker
           start={draft.cwd || store.hello?.home || null}
@@ -263,25 +272,35 @@ function BotSettingsForm({ draft, onChange, error, plugins }: {
 }
 
 /** A card of on/off switches for the connectors or skills installed on the computer. */
-function PluginToggles({ title, empty, items, selection, onChange }: {
+function PluginToggles({ title, empty, items, selection, onChange, onInfo }: {
   title: string
   empty: string
   items: { id: string; name: string; detail: string }[]
   selection: string[]
   onChange: (ids: string[]) => void
+  /** Shows an item's details from an info button beside its switch. */
+  onInfo?: (item: { id: string; name: string; detail: string }) => void
 }) {
   return (
     <CardSection title={title}>
       {items.length ? null : <span style={{ color: 'var(--secondary)' }}>{empty}</span>}
-      {items.map((item) => (
-        <SwitchRow
-          key={item.id}
-          title={item.name}
-          detail={item.detail || null}
-          on={selection.includes(item.id)}
-          onChange={(on) => onChange([...selection.filter((id) => id !== item.id), ...(on ? [item.id] : [])])}
-        />
-      ))}
+      {items.map((item) => {
+        const row = (
+          <SwitchRow
+            key={item.id}
+            title={item.name}
+            detail={item.detail || null}
+            on={selection.includes(item.id)}
+            onChange={(on) => onChange([...selection.filter((id) => id !== item.id), ...(on ? [item.id] : [])])}
+          />
+        )
+        return onInfo ? (
+          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
+            <IconButton title={`About ${item.name}`} icon="info.circle" onClick={() => onInfo(item)} />
+          </div>
+        ) : row
+      })}
     </CardSection>
   )
 }

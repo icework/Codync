@@ -38,9 +38,10 @@ export function Spinner({ size = 14 }: { size?: number }) {
 }
 
 /** On/off switch: label on the left, a flat capsule track on the right. */
-export function Switch({ on, onChange, children, disabled, style }: { on: boolean; onChange: (on: boolean) => void; children?: ReactNode; disabled?: boolean; style?: CSSProperties }) {
+/** `label` names a switch whose visible label sits outside it (beside an info button, say). */
+export function Switch({ on, onChange, children, label, disabled, style }: { on: boolean; onChange: (on: boolean) => void; children?: ReactNode; label?: string; disabled?: boolean; style?: CSSProperties }) {
   return (
-    <button className="switch" role="switch" aria-checked={on} disabled={disabled} onClick={() => onChange(!on)} style={style}>
+    <button className="switch" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} style={style}>
       {children !== undefined ? <span className="switch-label">{children}</span> : null}
       <span className={`switch-track ${on ? 'on' : ''}`}>
         <span className="switch-knob" />
@@ -132,7 +133,7 @@ export function CardForm({ children, style }: { children: ReactNode; style?: CSS
  * A titled group of rows (ChatGPT's desktop settings): a small bold heading over a filled,
  * rounded group whose rows are split by inset hairlines.
  */
-export function CardSection({ title, footer, accessory, children }: { title?: string | null; footer?: string | null; accessory?: ReactNode; children: ReactNode }) {
+export function CardSection({ title, footer, accessory, children }: { title?: string | null; footer?: ReactNode; accessory?: ReactNode; children: ReactNode }) {
   const rows = Children.toArray(children)
   return (
     <section className="card-section">
@@ -212,5 +213,14 @@ export function Pill({ children, fill = 'var(--background)', outlined = false, s
     <span className="pill" style={{ background: outlined ? 'transparent' : fill, boxShadow: outlined ? 'inset 0 0 0 1px var(--border)' : undefined, ...style }}>
       {children}
     </span>
+  )
+}
+
+/** Determinate progress (`value` 0...1): a thin capsule track that fills from the left. */
+export function ProgressBar({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="progress-track" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)}>
+      <div className="progress-fill" style={{ transform: `scaleX(${value})` }} />
+    </div>
   )
 }

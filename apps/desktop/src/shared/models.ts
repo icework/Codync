@@ -20,6 +20,8 @@ export interface Bot {
   /** `ask` or `auto`. */
   permission: string
   model?: string | null
+  /** The model's own settings (effort, fast…): agent option id → value. */
+  modelOptions: Record<string, string>
   /** The agent's Fast mode (Claude Code, Codex): faster replies for more usage. */
   fastMode: boolean
   /** What the agent says about Fast mode: `unknown` (no session yet), `offered`, `unsupported`,
@@ -65,6 +67,7 @@ export function normalizeBot(raw: Partial<Bot> & { id: string }): Bot {
     managedWorkspace: raw.managedWorkspace ?? false,
     permission: raw.permission ?? 'auto',
     model: raw.model ?? null,
+    modelOptions: raw.modelOptions ?? {},
     fastMode: raw.fastMode ?? false,
     fastModeSupport: raw.fastModeSupport ?? 'unknown',
     fastModeIssue: raw.fastModeIssue ?? null,
@@ -247,6 +250,8 @@ export interface Backend {
   curated?: boolean
   signedIn?: boolean
   canInstall?: boolean
+  /** Only for an agent that runs on Node.js, on a computer without its own: Codync's copy is missing or added. */
+  node?: 'missing' | 'added'
 }
 
 export interface ScreenDisplay {
@@ -285,7 +290,7 @@ export function normalizeScreen(raw: Partial<ScreenState> | undefined | null): S
     displays: raw.displays ?? [],
     userControl: raw.userControl ?? false,
     agentBot: raw.agentBot ?? null,
-    computerUse: raw.computerUse ?? raw.enabled ?? false,
+    computerUse: raw.computerUse ?? false,
     viewers: raw.viewers ?? 0,
   }
 }
@@ -306,8 +311,8 @@ export interface Hello {
   boxKey?: string
   minApp?: string
   cloud?: string | null
-  /** Product analytics on this computer; null until its owner chose (absent on older hosts). */
-  analytics?: boolean | null
+  /** Product analytics on this computer: on unless its owner turned it off. */
+  analytics?: boolean
 }
 
 /** Events only the desktop app knows about; the host records everything else from API calls. */
@@ -316,7 +321,6 @@ export type AnalyticsEvent = 'app_opened' | 'onboarding_completed' | 'signed_in'
 export interface PairingInfo {
   pairingUrl: string
   urls: string[]
-  svg?: string
   expiresAt?: number
 }
 
@@ -413,6 +417,7 @@ export interface BotDraft {
   cwd: string
   permission: string
   model?: string | null
+  modelOptions?: Record<string, string>
   fastMode?: boolean
   pinned?: boolean
   hidden?: boolean
@@ -434,6 +439,7 @@ export function draftOf(bot: Bot): BotDraft {
     cwd: bot.managedWorkspace ? '' : bot.cwd,
     permission: bot.permission,
     model: bot.model ?? null,
+    modelOptions: bot.modelOptions,
     fastMode: bot.fastMode,
     pinned: bot.pinned,
     hidden: bot.hidden,

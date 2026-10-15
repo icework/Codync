@@ -27,11 +27,11 @@ import { ComputerAccessView } from './computer-access/ComputerAccessView'
 import { HostStateView } from './HostStateView'
 import { StartupRecovery } from './StartupRecovery'
 export { EmptyState } from './HostStateView'
-import { AnalyticsPrompt } from './AnalyticsPrompt'
 import { StarPrompt } from './StarPrompt'
 import { OpenVoiceSettings } from './call/CallView'
 import { AccountPanelLayer, DesktopActionMenu, ProfileAvatar } from './PanelMenus'
 import { useTraySummary } from './tray-summary'
+import { useIslandSummary } from './island-summary'
 import { useSSH, useSSHAttachments } from './settings/ssh-model'
 import './chat-window.css'
 import './sidebar-header.css'
@@ -46,6 +46,7 @@ export function ChatWindow() {
   const [showAccess, setShowAccess] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
   useTraySummary(app)
+  useIslandSummary(app)
   useSSHAttachments(app)
   const ssh = useSSH()
   const showsChat = shouldShowChat(app.host.state.kind, app.computers.length, ssh.state)
@@ -79,6 +80,18 @@ export function ChatWindow() {
           case 'setRemoteScreen':
             void app.setRemoteScreen(c.on)
             return
+          case 'respondPermission': {
+            const ref = parseRef(c.ref)
+            const store = ref ? app.store(ref.computerId) : null
+            const entry = ref ? store?.allEntries(ref.botId).find((e) => e.id === c.entryId) : undefined
+            if (store && entry) store.respond(entry, c.optionId)
+            return
+          }
+          case 'sendMessage': {
+            const ref = parseRef(c.ref)
+            if (ref) app.store(ref.computerId)?.send(c.text, ref.botId)
+            return
+          }
         }
       }),
     [app],
@@ -103,7 +116,7 @@ export function ChatWindow() {
           }}
         />
       )}
-      {onboarded && accessSetup !== null ? <><AnalyticsPrompt /><StarPrompt /></> : null}
+      {onboarded && accessSetup !== null ? <StarPrompt /> : null}
       <Sheet open={showAccess} onClose={() => setShowAccess(false)} width={660} height={Math.min(820, window.innerHeight - 80)}>
         <ModalHeader title="Computer access" />
         <ComputerAccessView onContinue={(ready) => { setAccessSetup(ready ? 'ready' : 'later'); setShowAccess(false) }} />
@@ -310,6 +323,7 @@ function ChatSplitView() {
   } else {
     detail = (
       <div className="empty-detail">
+        <div className="detail-drag drag" />
         <div style={{ display: 'flex' }}>
           <CharacterAvatar shape="blob" color="blue" size={60} mood="working" />
           <CharacterAvatar shape="squircle" color="orange" size={60} style={{ marginLeft: -10 }} />
@@ -358,13 +372,13 @@ function ChatSplitView() {
             <IconButton title="Search" icon="magnifyingglass" onClick={() => setSearching(true)} />
             <IconButton title="New" icon="plus" size={36} buttonRef={railNewButton} disabled={!onlineStores.length} onClick={() => setRailNewMenu((o) => !o)} />
             <AnchoredMenu open={railNewMenu} onClose={() => setRailNewMenu(false)} anchor={railNewButton} items={newItems} />
-            <IconButton title="Connect apps" icon="square.grid.2x2" size={36} onClick={openMarketplace} />
+            <IconButton title="Extensions" icon="square.grid.2x2" size={36} onClick={openMarketplace} />
             <button className="rail-profile" style={{ background: showAccount ? 'var(--bubble-agent)' : undefined }} aria-label="Open account menu for Account" title="Account" onClick={() => setShowAccount((s) => !s)}>
               <ProfileAvatar />
             </button>
           </div>
         ) : (
-          <SidebarFooter accountOpen={showAccount} onAccount={() => setShowAccount((s) => !s)} onConnectApps={openMarketplace} />
+          <SidebarFooter accountOpen={showAccount} onAccount={() => setShowAccount((s) => !s)} onExtensions={openMarketplace} />
         )}
       </aside>
       <div className="sidebar-divider" onPointerDown={onDividerDown} onPointerMove={onDividerMove} onPointerUp={() => (dragStart.current = null)} role="separator" aria-label="Resize sidebar" aria-valuenow={width} />

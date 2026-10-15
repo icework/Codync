@@ -7,7 +7,7 @@ mod common;
 
 use serde_json::{Value, json};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
 struct Host {
@@ -29,21 +29,7 @@ impl Host {
         let home = std::env::temp_dir().join(format!("codync-turns-e2e-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&home).unwrap();
         common::seed_memory_runtime(&home);
-        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let child = Command::new(env!("CARGO_BIN_EXE_codync-host"))
-            .args(["serve", "--bind", "127.0.0.1", "--port", &port.to_string()])
-            .env("CODYNC_HOME", &home)
-            .env("CODYNC_CLOUD", "off")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-        let base = format!("http://127.0.0.1:{port}");
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while reqwest::get(format!("{base}/health")).await.is_err() {
-            assert!(Instant::now() < deadline, "host didn't start");
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+        let (child, base) = common::serve(&home).await;
         let token = std::fs::read_to_string(home.join("token")).unwrap().trim().to_owned();
         Self { child, base, token, home }
     }
@@ -111,7 +97,7 @@ async fn stop_ends_a_turn_whose_agent_ignores_the_cancel() {
     host.call("stop", json!({"botId": bot})).await;
     // The agent never answers: after the grace period its process is stopped and the turn ends.
     host.wait_for(&bot, Duration::from_secs(40), |e| e["kind"] == "notice" && e["data"]["text"] == "Stopped.").await;
-    let sync = host.call("sync", json!({"since": 0})).await;
+    let sync = common::snapshot(&host.base, &host.token).await;
     assert_eq!(sync["bots"][0]["status"], "idle");
 }
 
@@ -180,7 +166,7 @@ async fn fast_mode_switches_live_sessions_without_a_restart() {
     host.call("send", json!({"botId": bot, "text": "one"})).await;
     host.wait_for(&bot, Duration::from_secs(60), speed_reply("fast on", "one")).await;
     assert_eq!(log().matches(FAST_ON).count(), 1);
-    let sync = host.call("sync", json!({"since": 0})).await;
+    let sync = common::snapshot(&host.base, &host.token).await;
     assert_eq!(sync["bots"][0]["fastModeSupport"], "offered");
 
     // Off and on again: the same agent process switches the live session before each turn.
@@ -209,7 +195,7 @@ async fn a_refused_fast_mode_is_reported_and_not_asked_for_again() {
     host.call("updateBot", json!({"id": bot, "fastMode": true})).await;
     host.call("send", json!({"botId": bot, "text": "one"})).await;
     host.wait_for(&bot, Duration::from_secs(60), speed_reply("fast off", "one")).await;
-    let state = &host.call("sync", json!({"since": 0})).await["bots"][0];
+    let state = &common::snapshot(&host.base, &host.token).await["bots"][0];
     assert_eq!(state["fastModeSupport"], "refused");
     assert_eq!(state["fastModeIssue"], "requires extra usage");
     assert_eq!(state["fastMode"], true, "the user's choice stays");

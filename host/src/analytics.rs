@@ -1,6 +1,6 @@
-//! Opt-in product analytics (`PostHog`), decided once per computer by its owner
-//! (`setAnalytics`; nothing is sent until then). Events name the feature that was used
-//! and never carry content: no message text, prompts, file names, paths or bot names.
+//! Product analytics (`PostHog`), on unless the computer's owner turned it off
+//! (`setAnalytics`). Events name the feature that was used and never carry content:
+//! no message text, prompts, file names, paths or bot names.
 //! What is collected and why: docs/features/analytics.md.
 
 use crate::LockExt as _;
@@ -13,6 +13,8 @@ use serde_json::{Map, Value, json};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
+
+pub mod errors;
 
 const KV_ENABLED: &str = "analytics_enabled";
 /// The account the install id was last merged into (one `$identify` per account).
@@ -48,6 +50,8 @@ pub enum Event {
     RemoteScreenOpened,
     ConnectorInstalled,
     SkillInstalled,
+    /// Error tracking (`errors`): a panic or an uncaught error.
+    Exception,
 }
 
 impl Event {
@@ -73,6 +77,7 @@ impl Event {
             Self::RemoteScreenOpened => "remote_screen_opened",
             Self::ConnectorInstalled => "connector_installed",
             Self::SkillInstalled => "skill_installed",
+            Self::Exception => "$exception",
         }
     }
 
@@ -83,37 +88,33 @@ impl Event {
 }
 
 pub struct Analytics {
-    /// `None` until the owner has chosen.
-    enabled: Mutex<Option<bool>>,
+    enabled: Mutex<bool>,
     tx: mpsc::UnboundedSender<Msg>,
     rx: Mutex<Option<mpsc::UnboundedReceiver<Msg>>>,
 }
 
 enum Msg {
     Event(Value),
+    /// A panic, captured off the panicking thread (`errors::report_panics`).
+    Report(errors::Report),
     /// Send what's queued now and answer when done.
     Flush(oneshot::Sender<()>),
 }
 
 impl Analytics {
     pub fn load(store: &Store) -> Self {
-        let enabled = match store.kv_get(KV_ENABLED).as_deref() {
-            Some("1") => Some(true),
-            Some("0") => Some(false),
-            _ => None,
-        };
+        let enabled = store.kv_get(KV_ENABLED).as_deref() != Some("0");
         let (tx, rx) = mpsc::unbounded_channel();
         Self { enabled: Mutex::new(enabled), tx, rx: Mutex::new(Some(rx)) }
     }
 
-    /// `null` until asked, which is when the computer's apps ask.
-    pub fn state(&self) -> Option<bool> {
+    pub fn state(&self) -> bool {
         *self.enabled.locked()
     }
 
     pub fn set_enabled(&self, store: &Store, on: bool) -> Result<()> {
         store.kv_set(KV_ENABLED, if on { "1" } else { "0" })?;
-        *self.enabled.locked() = Some(on);
+        *self.enabled.locked() = on;
         Ok(())
     }
 }
@@ -200,8 +201,17 @@ pub enum TurnSource {
     Bot,
 }
 
-/// `turn_finished`: the agent, how the turn ended and how long it ran; never its text or error.
-pub fn turn_finished(hub: &Hub, agent: &str, outcome: TurnOutcome, stop_reason: &str, source: TurnSource, ms: i64) {
+/// `turn_finished`: the agent, how the turn ended, why it failed and how long it ran;
+/// never its text or the error's.
+pub fn turn_finished(
+    hub: &Hub,
+    agent: &str,
+    outcome: TurnOutcome,
+    stop_reason: &str,
+    failure: Option<&anyhow::Error>,
+    source: TurnSource,
+    ms: i64,
+) {
     let outcome = match outcome {
         TurnOutcome::Done => "done",
         TurnOutcome::Stopped => "stopped",
@@ -221,8 +231,41 @@ pub fn turn_finished(hub: &Hub, agent: &str, outcome: TurnOutcome, stop_reason: 
         TurnSource::Group => "group",
         TurnSource::Bot => "bot",
     };
-    let p = json!({"agent": agent, "outcome": outcome, "stop_reason": stop_reason, "source": source, "seconds": ms.max(0) / 1000});
+    let mut p = json!({"agent": agent, "outcome": outcome, "stop_reason": stop_reason, "source": source, "seconds": ms.max(0) / 1000});
+    if let Some(e) = failure {
+        let (kind, rpc_code) = failure_kind(e);
+        p["error"] = kind.into();
+        if let Some(code) = rpc_code {
+            p["rpc_code"] = code.into();
+        }
+    }
     capture(hub, Event::TurnFinished, p.as_object().cloned().unwrap_or_default());
+}
+
+/// Why a turn failed, as a category (plus the agent's JSON-RPC code): never the error's text,
+/// which can hold paths and agent output.
+fn failure_kind(e: &anyhow::Error) -> (&'static str, Option<i64>) {
+    use crate::agent::acp::{Failure, FailureKind, RpcError};
+    if let Some(f) = e.chain().find_map(|c| c.downcast_ref::<Failure>()) {
+        let kind = match f.kind {
+            FailureKind::NotSetUp => "not_installed",
+            FailureKind::Timeout => "timeout",
+            FailureKind::Exited => "exited",
+        };
+        return (kind, None);
+    }
+    if crate::agent::acp::needs_sign_in(e) {
+        return ("sign_in", None);
+    }
+    for cause in e.chain() {
+        if let Some(r) = cause.downcast_ref::<RpcError>() {
+            return ("agent_error", Some(r.code));
+        }
+        if let Some(io) = cause.downcast_ref::<std::io::Error>() {
+            return (if io.kind() == std::io::ErrorKind::NotFound { "not_installed" } else { "io" }, None);
+        }
+    }
+    ("other", None)
 }
 
 /// `observe` plus what only the store knows: a resent message (same `clientNonce`) is
@@ -245,17 +288,15 @@ pub fn observe_call(hub: &Hub, caller: &Caller, method: &str, b: &Value) -> Opti
     Some((event, p))
 }
 
-/// Queues one event unless the owner said no. Until they answer, events wait in memory
-/// and leave only after a yes (see `start`). Signed in to a Codync account, events are
-/// linked to that account; otherwise to this install's random id, with no person profile.
+/// Queues one event unless the owner turned analytics off. Signed in to a Codync account,
+/// events are linked to that account; otherwise to this install's random id. Both get a
+/// person profile.
 pub fn capture(hub: &Hub, event: Event, mut properties: Map<String, Value>) {
-    let consent = hub.analytics.state();
-    if consent == Some(false) {
+    if !hub.analytics.state() {
         return;
     }
     let account = hub.cloud.status().owner.map(|o| o.user_id);
-    if consent == Some(true)
-        && let Some(user) = &account
+    if let Some(user) = &account
         && hub.store.kv_get(KV_IDENTIFIED).as_deref() != Some(user.as_str())
     {
         // Merges this install's earlier, anonymous events into the account.
@@ -265,7 +306,7 @@ pub fn capture(hub: &Hub, event: Event, mut properties: Map<String, Value>) {
             tracing::warn!(error = format!("{e:#}"), "couldn't save the analytics identity");
         }
     }
-    properties.insert("$process_person_profile".into(), account.is_some().into());
+    properties.insert("$process_person_profile".into(), true.into());
     queue(hub, event.name(), account.as_deref().unwrap_or(&hub.host_id), properties);
 }
 
@@ -276,7 +317,6 @@ fn queue(hub: &Hub, event: &str, distinct_id: &str, mut properties: Map<String, 
         ("env".into(), (if option_env!("CODYNC_ENV") == Some("main") { "main" } else { "dev" }).into()),
         ("$os".into(), std::env::consts::OS.into()),
         ("arch".into(), std::env::consts::ARCH.into()),
-        ("$geoip_disable".into(), true.into()),
         // Joins this computer's events across accounts and with its phones' `computer_paired`.
         ("computer".into(), computer_tag(&hub.identity.computer_id()).into()),
     ]);
@@ -302,10 +342,10 @@ pub fn computer_tag(computer_id: &str) -> String {
     })
 }
 
-/// Sends queued events in batches every `FLUSH_EVERY`; until the owner answers they wait,
-/// and a no drops them.
+/// Sends queued events in batches every `FLUSH_EVERY`; turning analytics off drops them.
 pub fn start(hub: &Arc<Hub>) {
     let Some(mut rx) = hub.analytics.rx.locked().take() else { return };
+    errors::report_panics(hub);
     let hub = hub.clone();
     tokio::spawn(async move {
         let mut pending: Vec<Value> = Vec::new();
@@ -314,6 +354,7 @@ pub fn start(hub: &Arc<Hub>) {
             tokio::select! {
                 msg = rx.recv() => match msg {
                     Some(Msg::Event(e)) => pending.push(e),
+                    Some(Msg::Report(r)) => errors::capture_report(&hub, r),
                     Some(Msg::Flush(done)) => {
                         flush(&hub, &mut pending).await;
                         let _ = done.send(());
@@ -330,9 +371,9 @@ pub fn start(hub: &Arc<Hub>) {
 }
 
 async fn flush(hub: &Hub, pending: &mut Vec<Value>) {
-    let consent = hub.analytics.state();
-    let sent = consent == Some(true) && !pending.is_empty() && send(pending).await;
-    if sent || consent == Some(false) {
+    let on = hub.analytics.state();
+    let sent = on && !pending.is_empty() && send(pending).await;
+    if sent || !on {
         pending.clear();
     }
 }
@@ -346,6 +387,11 @@ pub async fn flush_before_exit(hub: &Hub) {
 }
 
 async fn send(batch: &[Value]) -> bool {
+    // Debug builds (`cargo test`, `cargo run`) are throwaway hosts: each e2e test's fresh
+    // home would count as a new user, and one built with `CODYNC_ENV=main` lands in production.
+    if cfg!(debug_assertions) {
+        return true;
+    }
     let body = json!({"api_key": TOKEN, "batch": batch});
     match crate::http().post(BATCH_URL).json(&body).timeout(Duration::from_secs(15)).send().await {
         Ok(r) if r.status().is_success() => true,
@@ -406,9 +452,35 @@ mod tests {
     }
 
     #[test]
+    fn on_until_the_owner_turns_it_off() {
+        let store = Store::open(std::path::Path::new(":memory:")).unwrap();
+        assert!(Analytics::load(&store).state());
+        Analytics::load(&store).set_enabled(&store, false).unwrap();
+        assert!(!Analytics::load(&store).state(), "an off stays off");
+    }
+
+    #[test]
     fn computer_tag_matches_the_iphone() {
         // Same vector as the iPhone's AnalyticsTests.
         assert_eq!(computer_tag("AAECAwQFBgcICQoLDA0ODw"), "2d6878bee20aba04");
+    }
+
+    #[test]
+    fn a_failed_turn_names_its_kind_not_its_text() {
+        use crate::agent::acp::{Failure, FailureKind, RpcError};
+        use anyhow::Context as _;
+        let setup = Failure::error(FailureKind::NotSetUp, "Codex isn't set up on this computer.");
+        assert_eq!(failure_kind(&setup), ("not_installed", None));
+        let hung = Err::<(), _>(Failure::error(FailureKind::Timeout, "no answer")).context("starting");
+        assert_eq!(failure_kind(&hung.expect_err("failed")), ("timeout", None));
+        let missing = std::io::Error::new(std::io::ErrorKind::NotFound, "/Users/me/bin/agent");
+        let spawn = Err::<(), _>(missing).context("starting `/Users/me/bin/agent`");
+        assert_eq!(failure_kind(&spawn.expect_err("failed")), ("not_installed", None));
+        let auth = anyhow::Error::new(RpcError { code: -32000, message: "Authentication required".into() });
+        assert_eq!(failure_kind(&auth), ("sign_in", None));
+        let rpc = anyhow::Error::new(RpcError { code: -32603, message: "Internal error: /Users/me".into() });
+        assert_eq!(failure_kind(&rpc), ("agent_error", Some(-32603)));
+        assert_eq!(failure_kind(&anyhow::anyhow!("something else")), ("other", None));
     }
 
     #[test]

@@ -1,9 +1,12 @@
 //! The screen's state: panes, overlays and their forms, and where clicks land.
 
 use ratatui::layout::Rect;
+use std::collections::BTreeMap;
 use std::time::Instant;
 
-use super::super::manage::{AgentSetup, BotChatSheet, Fields, Market, MemorySheet, RoutineForm, RoutineList};
+use super::super::manage::{
+    AgentSetup, AnalyticsSheet, BotChatSheet, Fields, Market, MemorySheet, RoutineForm, RoutineList, SkillSheet,
+};
 use super::{Editor, Mark};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -53,15 +56,16 @@ pub enum Action {
     Usage,
     CheckUpdate,
     Analytics,
+    AboutAnalytics,
     Keys,
 }
 
 pub const NEW_GROUP: &str = "New group chat";
 
-pub const ACTIONS: [(&str, &str, Action); 11] = [
+pub const ACTIONS: [(&str, &str, Action); 12] = [
     ("New bot…", "n", Action::NewBot),
     ("New group chat…", "m", Action::NewGroup),
-    ("Marketplace: agents, connectors, skills…", "A", Action::Market),
+    ("Extensions: agents, connectors, skills…", "A", Action::Market),
     ("Memory of this bot…", "M", Action::Memory),
     ("Routines of this bot…", "R", Action::Routines),
     ("Refresh agents", "", Action::RefreshAgents),
@@ -69,6 +73,7 @@ pub const ACTIONS: [(&str, &str, Action); 11] = [
     ("Usage", "U", Action::Usage),
     ("Check for updates", "", Action::CheckUpdate),
     ("Share usage analytics", "", Action::Analytics),
+    ("About usage analytics…", "", Action::AboutAnalytics),
     ("Keys", "?", Action::Keys),
 ];
 
@@ -132,6 +137,7 @@ pub enum Field {
     Instructions,
     Agent,
     Model,
+    ModelOptions,
     Fast,
     Folder,
     Approvals,
@@ -143,11 +149,12 @@ pub enum Field {
     Skills,
 }
 
-pub const FIELDS: [Field; 13] = [
+pub const FIELDS: [Field; 14] = [
     Field::Name,
     Field::Instructions,
     Field::Agent,
     Field::Model,
+    Field::ModelOptions,
     Field::Fast,
     Field::Folder,
     Field::Approvals,
@@ -172,6 +179,8 @@ pub struct Form {
     pub instructions: Editor,
     pub backend: String,
     pub model: Editor,
+    /// Model settings (effort, fast…) and the model they were picked for.
+    pub model_options: (String, BTreeMap<String, String>),
     pub fast: bool,
     pub cwd: String,
     pub auto: bool,
@@ -191,6 +200,11 @@ pub struct Form {
 impl Form {
     pub fn current(&self) -> Field {
         FIELDS[self.field]
+    }
+
+    /// The settings picked for the model now in the field; another model has none yet.
+    pub fn model_options(&self) -> Option<&BTreeMap<String, String>> {
+        (self.model_options.0 == self.model.text.trim()).then_some(&self.model_options.1)
     }
 }
 
@@ -248,8 +262,8 @@ pub enum Overlay {
     Market(Box<Market>),
     Agent(AgentSetup),
     Fields(Box<Fields>),
-    /// The one-time analytics question; `true` highlights Share usage.
-    Consent(bool),
+    Skill(SkillSheet),
+    Analytics(AnalyticsSheet),
 }
 
 pub struct Toast {

@@ -34,13 +34,14 @@ impl App {
             fuzzy(q, &fields)
         };
         match m.tab {
-            Tab::Agents => self
-                .backends
-                .iter()
-                .filter(|b| b["available"] == true || b["installed"] == true || b["curated"] == true)
-                .filter(|b| hit(b, &["name", "id"]))
-                .map(Row::Agent)
-                .collect(),
+            Tab::Agents => {
+                let agents = self
+                    .backends
+                    .iter()
+                    .filter(|b| b["available"] == true || b["installed"] == true || b["curated"] == true);
+                let node = agents.clone().any(|b| b["node"] == "missing").then_some(Row::Node);
+                node.into_iter().chain(agents.filter(|b| hit(b, &["name", "id"])).map(Row::Agent)).collect()
+            }
             Tab::Connectors => {
                 let installed: Vec<&str> = self.plugins.0.iter().filter_map(|c| c["registryName"].as_str()).collect();
                 let mut rows: Vec<Row> =
@@ -140,24 +141,31 @@ impl App {
 
     fn market_enter(&mut self, mut m: Box<Market>) -> Option<Overlay> {
         enum Act {
+            Node,
             Agent(String),
             SignIn(String),
             Custom,
             Install(Value),
             More,
-            Skill(String),
+            Skill(Value, bool),
             None,
         }
         let act = match self.market_rows(&m).get(m.cursor) {
+            Some(Row::Node) => Act::Node,
             Some(Row::Agent(b)) => Act::Agent(s(b, "id")),
             Some(Row::Installed(c)) if c["auth"] == "signedOut" => Act::SignIn(s(c, "id")),
             Some(Row::Custom) => Act::Custom,
             Some(Row::Registry(c)) => Act::Install((*c).clone()),
             Some(Row::More) => Act::More,
-            Some(Row::Skill(v)) => Act::Skill(s(v, "source")),
+            Some(Row::Skill(v)) => Act::Skill((*v).clone(), true),
+            Some(Row::OwnSkill(v)) => Act::Skill((*v).clone(), false),
             _ => Act::None,
         };
         match act {
+            Act::Node => {
+                let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+                self.start_setup("", "node", None, &json!({"cols": cols, "rows": rows}));
+            }
             Act::Agent(id) => {
                 self.overlays.push(Overlay::Market(m));
                 self.open_agent(&id);
@@ -238,9 +246,10 @@ impl App {
                     Reply::Registry { more: true },
                 );
             }
-            Act::Skill(source) => {
-                self.flash("Installing the skill…");
-                self.sheet("installSkill", json!({"source": source}), Reply::FieldsSaved);
+            Act::Skill(v, catalog) => {
+                self.overlays.push(Overlay::Market(m));
+                self.open_skill(&v, catalog);
+                return None;
             }
             Act::None => {}
         }

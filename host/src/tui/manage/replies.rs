@@ -2,7 +2,7 @@
 
 use serde_json::{Value, json};
 
-use super::super::app::{After, App, Entry, Overlay, Toggle};
+use super::super::app::{After, AgentModel, App, Entry, Overlay, Toggle};
 use super::{MemoryMode, Reply, Shell, open_browser, s};
 
 impl App {
@@ -71,6 +71,15 @@ impl App {
                         && m.bot == bot
                     {
                         m.mode = MemoryMode::Export { text: s(&v, "json"), scroll: 0 };
+                    }
+                }
+            }
+            Reply::SkillDetails(id) => {
+                for o in &mut self.overlays {
+                    if let Overlay::Skill(s) = o
+                        && s.id == id
+                    {
+                        s.markdown = Some(v["markdown"].as_str().unwrap_or_default().to_owned());
                     }
                 }
             }
@@ -189,15 +198,7 @@ impl App {
                 }
             }
             Reply::Models(backend) => {
-                let list = v["models"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|m| {
-                        let id = m["id"].as_str()?.to_owned();
-                        Some((id.clone(), m["name"].as_str().unwrap_or(&id).to_owned()))
-                    })
-                    .collect();
+                let list = v["models"].as_array().into_iter().flatten().filter_map(AgentModel::parse).collect();
                 if v["fastMode"] == true {
                     self.fast_mode.insert(backend.clone());
                 }
@@ -264,6 +265,15 @@ impl App {
                     }
                 }
                 self.flash(&e);
+            }
+            Reply::SkillDetails(id) => {
+                for o in &mut self.overlays {
+                    if let Overlay::Skill(s) = o
+                        && s.id == *id
+                    {
+                        s.error = Some(e.clone());
+                    }
+                }
             }
             Reply::Memory(_)
             | Reply::MemorySaved(_)

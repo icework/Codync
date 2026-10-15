@@ -1,6 +1,7 @@
 //! What the host sends: bots, transcript entries, and the messages that carry them.
 
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 use super::super::manage::Reply;
 use super::tilde;
@@ -33,7 +34,7 @@ pub enum After {
     Sent(String),
     Connection(String, super::super::connections::Step),
     Hello,
-    /// `track`: fire and forget (an older host doesn't know it).
+    /// `track`: fire and forget; analytics never surfaces an error.
     Tracked,
     Analytics,
     History(String),
@@ -93,6 +94,8 @@ pub struct Bot {
     pub managed_workspace: bool,
     pub auto: bool,
     pub model: Option<String>,
+    /// The model's own settings (effort, fast…): option id → value.
+    pub model_options: BTreeMap<String, String>,
     pub fast_mode: bool,
     /// What the agent says about Fast mode: `unknown`, `offered`, `unsupported` or `refused`.
     pub fast_support: String,
@@ -122,6 +125,36 @@ pub struct Bot {
 
 fn strs(v: &Value) -> Vec<String> {
     v.as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect()
+}
+
+/// A model an agent offers (`agentModels`), with its own settings.
+pub struct AgentModel {
+    pub id: String,
+    pub name: String,
+    pub options: Vec<ModelOption>,
+}
+
+/// A model setting (effort, fast…) and its values as `(id, name)`.
+pub struct ModelOption {
+    pub id: String,
+    pub name: String,
+    pub values: Vec<(String, String)>,
+}
+
+impl AgentModel {
+    pub fn parse(v: &Value) -> Option<Self> {
+        let pair = |v: &Value| {
+            let id = v["id"].as_str()?.to_owned();
+            Some((v["name"].as_str().unwrap_or(&id).to_owned(), id))
+        };
+        let (name, id) = pair(v)?;
+        let options = v["options"].as_array().into_iter().flatten().filter_map(|o| {
+            let (name, id) = pair(o)?;
+            let values = o["values"].as_array()?.iter().filter_map(|v| pair(v).map(|(n, i)| (i, n))).collect();
+            Some(ModelOption { id, name, values })
+        });
+        Some(Self { id, name, options: options.collect() })
+    }
 }
 
 impl Bot {
@@ -158,6 +191,12 @@ impl Bot {
             managed_workspace: v["managedWorkspace"] == true,
             auto: v["permission"] == "auto",
             model: v["model"].as_str().filter(|m| !m.is_empty()).map(str::to_owned),
+            model_options: v["modelOptions"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_owned())))
+                .collect(),
             fast_mode: v["fastMode"].as_bool().unwrap_or(false),
             fast_support: v["fastModeSupport"].as_str().unwrap_or("unknown").to_owned(),
             fast_issue: v["fastModeIssue"].as_str().map(str::to_owned),

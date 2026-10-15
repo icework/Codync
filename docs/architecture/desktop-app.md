@@ -16,7 +16,7 @@ determines when there are no earlier messages.
   as it streams needed an AppKit scroll view with hand-managed row hosting to stay usable. A
   browser engine lays out and scrolls long text natively.
 - **Two desktop apps were too much to keep in step.** Every UI change had to land in SwiftUI
-  and in GTK. One TypeScript app now covers both platforms (and Windows later, if wanted).
+  and in GTK. One TypeScript app now covers macOS, Linux and Windows.
 - The iPhone app has no such alternative and keeps SwiftUI, so `kit/` lost its second
   platform and became the iPhone app's own package.
 
@@ -24,7 +24,7 @@ determines when there are no earlier messages.
 
 | Path | |
 |---|---|
-| `src/main/` | Main process: host service (`host-controller.ts`), loopback HTTP/SSE proxy (`host-proxy.ts`), menu bar/tray, windows, account sign-in (Clerk Frontend API, `account.ts`), cloud API and device key (`cloud.ts`), updates (`updates.ts`), SSH tunnels (`ssh.ts`), Codync Screen agent (`screen.ts`), on-device speech (`speech.ts`), browser sign-in callbacks (`auth.ts`) |
+| `src/main/` | Main process: host service (`host-controller.ts`), loopback HTTP/SSE proxy (`host-proxy.ts`), menu bar/tray, windows, account sign-in (Clerk Frontend API, `account.ts`), cloud API and device key (`cloud.ts`), updates (`updates.ts`), SSH tunnels (`ssh.ts`), Codync Screen agent (`screen.ts`), on-device speech (`speech.ts`), browser sign-in callbacks (`auth.ts`), the [notch island](../features/notch-island.md) window (`island.ts`), [error tracking](../features/analytics.md#error-tracking) (`error-reports.ts`) |
 | `src/preload/` | The `window.codync` bridge (types in `src/shared/ipc.ts`) |
 | `src/renderer/store/` | `BotStore` (port of kit's; `bot-store.ts` actions over `bot-sync.ts` events stream and `bot-mirror.ts` state), `AppModel` (window state, approvals), `CloudModel` (claims, cloud default), `AccountSession` |
 | `src/renderer/components/` | Design system: controls, overlays (sheets, dialogs, menus), SF Symbol icons, character avatars, thinking orbs |
@@ -76,7 +76,8 @@ The TUI connects to one host at a time, so it keeps its single roster.
   `codync-host.exe` and `codync-hostw.exe` in `resources/`. `codync-host install` writes the
   per-user Run key (`HKCU\…\Run\CodyncHost`), which starts `codync-hostw.exe` at sign-in: a
   windowless launcher that runs the host with a hidden console (the agents share it, so none
-  opens a window) and restarts it when it exits. App updates stop the host first, as on macOS.
+  opens a window) and restarts it when it exits. One launcher runs per data folder (a second one,
+  say from the Run key and the app at once, exits). App updates stop the host first, as on macOS.
   Agents start through `cmd /c` (`host/src/shell.rs`), setup terminals use ConPTY
   (`portable-pty`), and the vault key lives in Credential Manager. Not on Windows yet: Remote
   screen and the `computer` MCP (no screen helper), on-device speech, the Claude Code status
@@ -92,6 +93,8 @@ The TUI connects to one host at a time, so it keeps its single roster.
   iPhone gate as before). Installs of the SwiftUI app get the first desktop release through one
   more Sparkle appcast, generated for the zip by the release workflow (deprecated, removed after
   2026-11-06: [updates guide](../guides/updates.md#deprecated-the-sparkle-migration-appcast-remove-after-2026-11-06)).
+  On macOS the app removes an idle installer job (`<appId>.ShipIt`) whose update request is gone:
+  launchd would otherwise restart it every 2 seconds, forever.
 
 ## Development
 
@@ -153,22 +156,7 @@ a certificate is still trusted: verify its exported public certificate with
 If Gatekeeper reports `CSSMERR_TP_CERT_REVOKED`, fix the signing identity rather than
 disabling security checks. Distributed builds still require Developer ID signing and notarization.
 
-## Parity with the SwiftUI app
-
-The port follows the Swift sources view by view (metrics, fonts, colors, motion), including the
-Mac chat redesign that was in progress at the time (larger chat text, actions beside messages,
-one composer capsule, circular chat controls, Jump to latest). It was checked side by side with
-the SwiftUI build against the same host using screenshots from Computer Use.
+## Composer checks
 
 Composer keyboard behavior, animation and durable draft storage, with a host-free
 regression fixture: [composer checks](../guides/composer.md).
-
-## The SwiftUI apps in the history
-
-`apps/macos/`, `apps/linux/` and the Mac code paths in `kit/` are in Git. The commit that
-removed them is `git log --oneline -1 -- apps/macos`; its parent is the last SwiftUI version:
-
-```sh
-git show <commit>^:apps/macos/Views/ChatWindow.swift
-git worktree add ../codync-swiftui <commit>^
-```

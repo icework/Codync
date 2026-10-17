@@ -2,6 +2,14 @@
 
 How a bot's work turns into what the user reads, copied from Grok Bot.
 
+## Markdown links
+
+Markdown links in bot replies are underlined on desktop and iPhone so they remain
+recognizable in both light and dark themes. Hovering a desktop link shows its
+destination URL; clicking opens it in the default browser. iPhone links keep the
+system link interaction. The terminal already underlines Markdown link labels;
+it has no pointer tooltip or link-opening action.
+
 ## Messages are sent, not streamed
 
 - Every bot gets the built-in `chat` MCP server (`codync-host mcp chat`,

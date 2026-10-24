@@ -58,7 +58,8 @@ fun AppStore.deleteBot(bot: Bot, onDeleted: () -> Unit) = action("delete:" + bot
     val active = ready()
     active.call("deleteBot", body("botId" to bot.id))
     mutableState.update { it.copy(selectedBot = it.selectedBot.takeUnless { id -> id == bot.id },
-        drafts = it.drafts.filterValues { draft -> draft.botId != bot.id }) }
+        // Its chat's draft and its artifacts' (`artifactDraftKey`).
+        drafts = it.drafts.filterKeys { key -> key != bot.id && !key.startsWith("${bot.id}/") }) }
     persistDrafts()
     onDeleted()
 }

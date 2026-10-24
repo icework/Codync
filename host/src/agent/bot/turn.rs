@@ -28,7 +28,9 @@ impl Actor {
     async fn compose(&mut self, sid: &str, text: &str) -> Result<String> {
         let instructions = self.conn.as_ref().map_or(Instructions::FirstMessage, Conn::instructions);
         let mut snapshot = self.snapshot(sid).await?;
+        // Sessions whose frozen instructions predate send_file or artifacts hear about them each turn.
         let remind_files = !snapshot.system.contains("send_file");
+        let remind_artifacts = !snapshot.system.contains("publish_artifact");
         let mut prompt = text.to_owned();
         // The user's handoff first, then what the fallback chain carries in.
         for first in [self.relay.carried.take(), self.handoff.take()].into_iter().flatten() {
@@ -55,9 +57,12 @@ impl Actor {
             prompt = format!("{prompt}\n\n{update}");
             self.announce = Some((snapshot, identity));
         }
-        if remind_files && self.active_group.is_none() && self.active_request.is_none() && self.active_routine.is_none()
-        {
+        let own_chat = self.active_group.is_none() && self.active_request.is_none() && self.active_routine.is_none();
+        if remind_files && own_chat {
             prompt.push_str("\n\n[Codync: send_file(path, name?) shares any regular file up to 100 MiB as a downloadable card. Use it instead of sending a local path.]");
+        }
+        if remind_artifacts && own_chat {
+            prompt.push_str("\n\n[Codync: for a report, plan, tracker or dashboard the user will come back to, write one self-contained HTML file and publish_artifact(path, title) instead of a long message. To change it, edit a copy of its HTML (list_artifacts) and publish_artifact(path, artifact: its id).]");
         }
         Ok(prompt)
     }

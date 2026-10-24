@@ -104,9 +104,10 @@ internal fun chatItems(entries: List<Entry>, pending: List<PendingSend>): List<C
         color = Palette.tertiary, textAlign = TextAlign.Center)
 }
 
-/** One chat-visible entry, with what can be done to it. `reply` quotes it in the composer; `addFallback` opens a bot's fallbacks. */
+/** One chat-visible entry, with what can be done to it. `reply` quotes it in the composer; `addFallback` opens a bot's fallbacks;
+ *  `openArtifact` opens an artifact card's artifact. */
 @Composable internal fun ChatRow(entry: Entry, groupStart: Boolean, chat: Bot?, state: AppState, store: AppStore,
-    openTrace: () -> Unit, reply: (() -> Unit)?, connect: ConnectionRequestActions, addFallback: (Bot) -> Unit) {
+    openTrace: () -> Unit, reply: (() -> Unit)?, connect: ConnectionRequestActions, addFallback: (Bot) -> Unit, openArtifact: (OpenArtifact) -> Unit) {
     val group = chat?.kind == "group"
     when (entry.kind) {
         "user" -> Column(Modifier.fillMaxWidth().padding(top = if (groupStart) 12.dp else 4.dp).animateContentSize(Motion.layoutSize),
@@ -117,7 +118,7 @@ internal fun chatItems(entries: List<Entry>, pending: List<PendingSend>): List<C
         "agent" -> Column(Modifier.fillMaxWidth().padding(top = if (groupStart) 12.dp else 4.dp).animateContentSize(Motion.layoutSize),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (group && groupStart) AuthorLabel(entry.data.text("author"), state)
-            AgentBubble(entry, state, store, openTrace, reply)
+            AgentBubble(entry, state, store, openTrace, reply, openArtifact)
             Box(Modifier.padding(start = if (group) 34.dp else 0.dp)) { ReactionsRow(entry, state, store) }
         }
         "permission" -> Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -236,13 +237,17 @@ internal val Entry.reactions: List<String> get() = (data["reactions"] as? JsonAr
     }
 }
 
-@Composable private fun AgentBubble(entry: Entry, state: AppState, store: AppStore, openTrace: () -> Unit, reply: (() -> Unit)?) {
+@Composable private fun AgentBubble(entry: Entry, state: AppState, store: AppStore, openTrace: () -> Unit, reply: (() -> Unit)?,
+    openArtifact: (OpenArtifact) -> Unit) {
     val context = LocalContext.current
     val focus = LocalFocusManager.current
     val files = entry.files
+    val artifact = entry.artifact
     Column(Modifier.fillMaxWidth().padding(end = 40.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        // A message with files is its files: the text is only the computer's fallback.
-        if (files.isNotEmpty()) Column(Modifier.contextActions(reactions = reactionPick(entry, store), onClick = { focus.clearFocus() }) { messageMenu(context, entry, reply, openTrace) },
+        // An artifact card or a message with files is that: the text is only the computer's fallback.
+        if (artifact != null) ArtifactCardView(artifact, entry.botId, state, store, Modifier.contextActions(reactions = reactionPick(entry, store),
+            onClick = { focus.clearFocus(); openArtifact(OpenArtifact(artifact.id, artifact.title, entry.id)) }) { messageMenu(context, entry, reply, openTrace) })
+        else if (files.isNotEmpty()) Column(Modifier.contextActions(reactions = reactionPick(entry, store), onClick = { focus.clearFocus() }) { messageMenu(context, entry, reply, openTrace) },
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
             for (file in files) FileDownloadCard(entry, file, state, store)
         } else if (entry.text.isNotEmpty()) Box(Modifier.clip(RoundedRectangle(18.dp)).background(Palette.bubbleAgent)

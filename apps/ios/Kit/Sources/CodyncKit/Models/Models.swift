@@ -140,7 +140,8 @@ public struct Entry: Codable, Identifiable, Hashable, Sendable {
     public var replyQuote: ReplyQuote {
         let names = (data.attachments?.map(\.name) ?? []) + (data.files?.map(\.name) ?? [])
         let text = data.text.flatMap { $0.isEmpty ? nil : $0 } ?? names.joined(separator: ", ")
-        return ReplyQuote(id: id, author: kind == "user" ? "user" : data.author ?? botId, text: String(text.prefix(500)))
+        return ReplyQuote(id: id, author: kind == "user" ? "user" : data.author ?? botId, text: String(text.prefix(500)),
+                          artifact: data.artifact?.id)
     }
 
     public var date: Date { Date(milliseconds: createdAt) }

@@ -24,6 +24,7 @@ the change.
 | `groups` | Group chats | [groups and replies](../features/groups-and-replies.md) |
 | `teamwork` | Bots messaging bots, Manage the team | [bot collaboration](../features/bot-collaboration.md) |
 | `routines` | Schedules, webhooks, runs | [routines](../features/routines.md) |
+| `artifacts` | Artifacts, the Library | [artifacts](../features/artifacts.md) |
 | `memory` | Layers, dreaming, the agent's own memory | [context and memory](../features/context-and-memory.md), [bot memory](../design/bot-memory.md) |
 | `connectors-and-skills` | MCP connectors, apps, skills | [connector credentials](../features/connector-credentials.md), [extensions](../features/marketplace.md) |
 | `agent-fallbacks` | The fallback chain | [agent fallbacks](../features/agent-fallback.md) |

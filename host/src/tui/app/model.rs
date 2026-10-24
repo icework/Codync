@@ -392,6 +392,11 @@ impl Entry {
         self.kind == Kind::User || self.is_final() || self.data["connectionRequest"].is_object()
     }
 
+    /// An artifact card's artifact id (`docs/features/artifacts.md`): `o` opens it, `f` saves it.
+    pub fn artifact(&self) -> Option<&str> {
+        if self.is_final() { self.data["artifact"]["id"].as_str() } else { None }
+    }
+
     /// A line that folds away a longer text: a handoff (`o` shows it).
     pub fn unfolds(&self) -> bool {
         crate::tui::view::unfoldable(self).is_some()

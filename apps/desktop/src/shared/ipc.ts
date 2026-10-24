@@ -207,6 +207,12 @@ export interface CodyncBridge {
     setAutoCheck(on: boolean): void
     setAutoDownload(on: boolean): void
   }
+  /** Artifacts shown in a frame of their own (`main/artifacts.ts`). */
+  artifacts: {
+    /** Makes `codync-artifact://<id>` serve this HTML. */
+    show(id: string, html: Uint8Array): Promise<void>
+    openInBrowser(id: string, html: Uint8Array): Promise<void>
+  }
   files: {
     begin(file: SharedFile): Promise<string | null>
     write(id: string, offset: number, data: Uint8Array): Promise<void>

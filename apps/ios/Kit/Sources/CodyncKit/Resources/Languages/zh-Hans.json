@@ -1172,5 +1172,21 @@
   "Too many screen connections. Try again in a minute.": "屏幕连接太多了。请过一分钟再试。",
   "Choose the language for this device. Unsupported system languages use English.": "选择此设备的界面语言。不支持的系统语言将使用英文。",
   "resets in {time}": "{time}后重置",
-  "Progress, step {step} of 4": "进度，第 {step} 步，共 4 步"
+  "Progress, step {step} of 4": "进度，第 {step} 步，共 4 步",
+  "Artifact": "Artifact",
+  "Message about “{title}”": "针对“{title}”发消息",
+  "Close artifact": "关闭 Artifact",
+  "Rename artifact": "重命名 Artifact",
+  "Artifact title": "Artifact 标题",
+  "Save as HTML": "保存为 HTML",
+  "Open in browser": "在浏览器中打开",
+  "Share artifact": "分享 Artifact",
+  "Couldn't open the artifact": "无法打开 Artifact",
+  "This week": "本周",
+  "Earlier": "更早",
+  "Open": "打开",
+  "More actions": "更多操作",
+  "Library": "资料库",
+  "Library is empty": "资料库还是空的",
+  "Artifacts {name} makes and files shared in this chat show here.": "{name} 做的 Artifact，和这个对话里分享的文件，都会出现在这里。"
 }

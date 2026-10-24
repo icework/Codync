@@ -4,7 +4,9 @@
 //! shell (GUI apps and launchd get a bare PATH), add the usual install dirs
 //! (Homebrew, ~/.local/bin, nvm, bun, volta, asdf, mise, pnpm…), then look for
 //! each known CLI. Launching prefers the installed CLI's own ACP mode and falls
-//! back to the official ACP registry build (npx / uvx / downloaded binary).
+//! back to the official ACP registry build (npx / uvx / downloaded binary), which
+//! is resolved only when it's tried: an installed CLI that starts never downloads
+//! a second copy.
 
 use crate::agent::{acp, node, registry};
 use crate::shell;
@@ -504,19 +506,16 @@ pub fn is_known(id: &str) -> bool {
     harness(id).is_some() || registry::agent(id).is_some()
 }
 
-/// Ways to start this backend, best first. Local CLIs can be too old to speak
-/// ACP, so the registry build is kept as a fallback.
-pub async fn launch_candidates(id: &str, progress: impl Fn(&str)) -> anyhow::Result<Vec<registry::Cmd>> {
-    let mut out: Vec<registry::Cmd> = local_candidate(id).into_iter().collect();
+/// Ways to start this backend, best first: the installed CLI's own ACP mode, then the
+/// registry build, for a CLI that isn't installed, has no ACP mode of its own, or is too old for it.
+pub fn launch_candidates(id: &str) -> anyhow::Result<Vec<registry::Candidate>> {
     let h = harness(id);
-    let reg_id = h.map_or(Some(id), |h| h.registry);
-    if let Some(agent) = reg_id.and_then(registry::agent) {
-        match registry::command(&agent, &progress).await {
-            Ok(cmd) => out.push(cmd),
-            Err(e) if out.is_empty() => return Err(e),
-            Err(e) => tracing::info!(backend = id, error = format!("{e:#}"), "registry build unavailable"),
-        }
-    }
+    let build = h.map_or(Some(id), |h| h.registry).and_then(registry::agent);
+    let out: Vec<_> = local_candidate(id)
+        .map(registry::Candidate::Ready)
+        .into_iter()
+        .chain(build.map(registry::Candidate::Build))
+        .collect();
     if out.is_empty() {
         let hint = h.map_or("Check that it's installed on this computer.", |h| h.setup);
         let name = h.map_or(id, |h| h.name);
@@ -563,7 +562,7 @@ pub async fn login_command(id: &str) -> anyhow::Result<String> {
 }
 
 /// The installed CLI's own ACP mode, if it has one and it's installed.
-pub fn local_candidate(id: &str) -> Option<registry::Cmd> {
+fn local_candidate(id: &str) -> Option<registry::Cmd> {
     let h = harness(id)?;
     let template = h.local?;
     let path = h.bins.iter().find_map(|b| which(b))?;
@@ -572,20 +571,4 @@ pub fn local_candidate(id: &str) -> Option<registry::Cmd> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_harness_is_unique() {
-        let ids: HashSet<_> = HARNESSES.iter().map(|h| h.id).collect();
-        assert_eq!(ids.len(), HARNESSES.len());
-        let bins: Vec<_> = HARNESSES.iter().flat_map(|h| h.bins).collect();
-        assert_eq!(bins.iter().collect::<HashSet<_>>().len(), bins.len(), "a CLI belongs to one harness");
-    }
-
-    #[test]
-    fn hermes_uses_native_acp() {
-        let h = harness("hermes").unwrap();
-        assert_eq!((h.local, h.registry, h.login), (Some("{bin} acp"), None, Some("{bin} acp --setup")));
-    }
-}
+mod tests;

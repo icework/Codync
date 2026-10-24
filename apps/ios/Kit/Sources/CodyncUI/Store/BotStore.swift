@@ -73,6 +73,7 @@ public final class BotStore {
     @ObservationIgnored var composerPasted: [String: [String]] = [:]
     public var routineDrafts: [String: String] = [:]
     public let fileDownloads = FileDownloads()
+    var artifacts = ArtifactCache()
     public var lastError: String?
     /// The open conversation (navigation path).
     public var selection: String?

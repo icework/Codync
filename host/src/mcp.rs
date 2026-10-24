@@ -71,6 +71,7 @@ pub async fn serve(bot: String, port: u16, server: Server) -> Result<()> {
         Server::Chat => {
             let mut tools = crate::chat::outbox::tools();
             if let Some(list) = tools.as_array_mut() {
+                list.extend(crate::chat::artifacts::tools());
                 list.extend(crate::chat::profile::tools());
                 list.extend(crate::chat::fallbacks::tools());
                 list.push(crate::chat::reactions::tool());

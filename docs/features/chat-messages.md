@@ -21,7 +21,8 @@ it has no pointer tooltip or link-opening action.
   needs neither words nor a reaction gets nothing, as in a group.
 - File cards are separate final entries. Sharing a file preserves an intended final text
   reply; a files-only turn uses its filename for the completion summary. See
-  [file attachments](file-attachments.md#files-from-a-bot).
+  [file attachments](file-attachments.md#files-from-a-bot). Artifact cards (`publish_artifact`) are final entries the
+  same way; see [artifacts](artifacts.md).
 - Group room turns, bot requests (`message_bot`) and routines reject `send_message` and `send_file`: their reply
   is the turn's last text, as before (`chat/group.rs`, `chat/team.rs`, `routines`).
 - A bot request's reply stays in the recipient's trace and the request notice; it does

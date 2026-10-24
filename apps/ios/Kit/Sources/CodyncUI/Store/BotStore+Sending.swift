@@ -35,20 +35,26 @@ extension BotStore {
         storage.composerDrafts[computer.id] = composerDrafts.isEmpty ? nil : composerDrafts
     }
 
+    /// The chat's draft, and the drafts of its artifacts (`artifactDraftKey`).
     func removeComposerDrafts(for botId: String) {
-        composerDrafts[botId] = nil
+        composerDrafts = composerDrafts.filter { $0.key != botId && !$0.key.hasPrefix("\(botId)/") }
         persistComposerDrafts()
     }
 
+    /// An artifact viewer's message box keeps its own draft, apart from the chat's.
+    static func artifactDraftKey(_ artifact: Artifact) -> String { "\(artifact.botId)/artifact/\(artifact.id)" }
+
     /// Transfer to the outbox now; an eventual acknowledgement must not erase a newer draft.
-    /// `replyTo`: the chat message it quotes.
+    /// `draft`: whose draft it is (the chat's when nil). `replyTo`: the chat message it quotes.
     @discardableResult
-    func sendComposerDraft(to botId: String, replyTo: Entry? = nil, files: [OutgoingFile] = []) -> Bool {
-        let text = composerDraft(for: botId)
+    func sendComposerDraft(to botId: String, draft key: String? = nil, replyTo: ReplyQuote? = nil,
+                           files: [OutgoingFile] = []) -> Bool {
+        let key = key ?? botId
+        let text = composerDraft(for: key)
         guard !retired, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !files.isEmpty else { return false }
-        let pasted = composerPasted[botId] ?? []
-        send(text, to: botId, replyTo: replyTo?.replyQuote, nonce: UUID().uuidString, files: files, pasted: pasted)
-        setComposerDraft("", for: botId)
+        let pasted = composerPasted[key] ?? []
+        send(text, to: botId, replyTo: replyTo, nonce: UUID().uuidString, files: files, pasted: pasted)
+        setComposerDraft("", for: key)
         return true
     }
 

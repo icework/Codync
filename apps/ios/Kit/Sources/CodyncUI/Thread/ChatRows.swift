@@ -14,6 +14,8 @@ struct ChatRow: View {
     var reply: (() -> Void)?
     /// A failure notice's "Add a fallback": the bot's details.
     var addFallback: (() -> Void)?
+    /// An artifact card's artifact, full size.
+    var openArtifact: ((ArtifactRef) -> Void)?
     @Environment(BotStore.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -30,7 +32,7 @@ struct ChatRow: View {
         case "agent":
             VStack(alignment: .leading, spacing: 4) {
                 if chat?.isGroup == true, groupStart { AuthorLabel(botId: entry.data.author) }
-                AgentBubble(entry: entry, openTrace: openTrace, reply: reply)
+                AgentBubble(entry: entry, openTrace: openTrace, reply: reply, openArtifact: openArtifact)
                 ReactionsRow(entry: entry)
                     .padding(.leading, chat?.isGroup == true ? 34 : 0)
             }
@@ -184,12 +186,15 @@ struct AgentBubble: View {
     let entry: Entry
     let openTrace: () -> Void
     var reply: (() -> Void)?
+    var openArtifact: ((ArtifactRef) -> Void)?
     @Environment(BotStore.self) private var model
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Group {
-                if let files = entry.data.files, !files.isEmpty {
+                if let artifact = entry.data.artifact {
+                    ArtifactCard(botId: entry.botId, ref: artifact) { openArtifact?(artifact) }
+                } else if let files = entry.data.files, !files.isEmpty {
                     ForEach(files) { file in FileDownloadCard(entry: entry, file: file) }
                 } else {
                     MarkdownText(entry.data.text ?? "").equatable()

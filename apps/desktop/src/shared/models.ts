@@ -1,3 +1,5 @@
+import type { ArtifactCard } from './artifacts'
+
 // Wire types for codync-host (see host/src/api/). Field names match the
 // host's camelCase JSON. Timestamps are epoch milliseconds.
 
@@ -202,6 +204,8 @@ export interface ReplyQuote {
   author: string
   /** Its text (or file names), at most 500 characters. */
   text: string
+  /** The artifact, when it quotes an artifact card: the message is about that artifact. */
+  artifact?: string
 }
 
 export interface Attachment {
@@ -302,6 +306,8 @@ export interface EntryData {
   botReactions?: BotReaction[]
   attachments?: Attachment[]
   files?: SharedFile[]
+  /** agent: an artifact the bot published (or updated) in this turn. */
+  artifact?: ArtifactCard
   callSeconds?: number
 }
 
@@ -343,7 +349,9 @@ export function isReplyable(e: Entry): boolean {
 /** The quote a sending reply shows until the computer's own replaces it. */
 export function quoteOf(e: Entry): ReplyQuote {
   const names = [...(e.data.attachments ?? []), ...(e.data.files ?? [])].map((f) => f.name).join(', ')
-  return { id: e.id, author: e.kind === 'user' ? 'user' : (e.data.author ?? e.botId), text: (e.data.text || names).slice(0, 500) }
+  const quote: ReplyQuote = { id: e.id, author: e.kind === 'user' ? 'user' : (e.data.author ?? e.botId), text: (e.data.text || names).slice(0, 500) }
+  if (e.data.artifact) quote.artifact = e.data.artifact.id
+  return quote
 }
 
 export interface UsageWindow {

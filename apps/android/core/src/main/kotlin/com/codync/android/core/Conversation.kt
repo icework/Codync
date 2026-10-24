@@ -33,6 +33,8 @@ data class Entry(
     val status: String? get() = data.text("status")
     /** Files the bot shared in this message. */
     val files: List<SharedFile> get() = data["files"]?.let { WireJson.decodeFromJsonElement<List<SharedFile>>(it) }.orEmpty()
+    /** The artifact a bot published in this message (an artifact card), read leniently: its text stands in for it. */
+    val artifact: ArtifactCard? get() = (data["artifact"] as? JsonObject)?.let { runCatching { WireJson.decodeFromJsonElement<ArtifactCard>(it) }.getOrNull() }
     /** Of memory and context, only a fresh conversation gets a line: memory lives in the bot's memory settings, a
      *  summary keeps the same conversation going, and a kept handoff changed nothing. */
     val isChat: Boolean get() = kind in listOf("user", "permission") ||
@@ -78,8 +80,9 @@ private data class EntryFields(
     val callSeconds: Long? = null,
 )
 @Serializable private data class PermissionChoice(val optionId: String, val name: String, val kind: String)
-/** A quoted message: its entry, who wrote it (`user` or a bot id) and its text, cut short by the computer. */
-@Serializable data class ReplyQuote(val id: String = "", val author: String = "", val text: String = "")
+/** A quoted message: its entry, who wrote it (`user` or a bot id) and its text, cut short by the computer; `artifact` when it
+ *  quotes an artifact card (the message is about that artifact). */
+@Serializable data class ReplyQuote(val id: String = "", val author: String = "", val text: String = "", val artifact: String? = null)
 
 @Serializable data class Attachment(val id: String, val name: String, val size: Long) {
     val isImage: Boolean get() = name.substringAfterLast('.', "").lowercase() in listOf("png", "jpg", "jpeg", "heic", "gif", "webp", "tiff", "bmp")
@@ -130,6 +133,8 @@ sealed interface MirrorEvent {
     data class EntryChanged(val entry: Entry) : MirrorEvent
     data class Usage(val value: JsonObject) : MirrorEvent
     data class Screen(val value: JsonObject) : MirrorEvent
+    /** An artifact was published, updated or renamed: live only, never a checkpoint. */
+    data class ArtifactChanged(val artifact: Artifact) : MirrorEvent
     data object Resync : MirrorEvent
     data object Ignored : MirrorEvent
 
@@ -142,6 +147,8 @@ sealed interface MirrorEvent {
             "entry" -> EntryChanged(Entry.decode(value.getValue("entry").jsonObject))
             "usage" -> Usage(value.getValue("usage").jsonObject)
             "screen" -> Screen(value.getValue("screen").jsonObject)
+            // Not in the catch-up: one this app can't read is passed over rather than fetching everything again.
+            "artifact" -> runCatching { ArtifactChanged(Artifact.decode(value.getValue("artifact"))) }.getOrDefault(Ignored)
             "resync" -> Resync
             // Match the existing clients: unknown events do not advance the cursor.
             else -> Ignored

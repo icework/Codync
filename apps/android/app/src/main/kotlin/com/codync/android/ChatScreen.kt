@@ -77,6 +77,9 @@ import com.kyant.shapes.Capsule
     // The routine the sheet opens on (a run's notice), or none for the list.
     var routineId by remember { mutableStateOf<String?>(null) }
     val openRoutine = { id: String? -> routineId = id; routines = true }
+    var library by remember { mutableStateOf(false) }
+    // The artifact open full size, over the chat and its Library.
+    var viewing by remember(bot.id) { mutableStateOf<OpenArtifact?>(null) }
     // The bot whose conversation with this one is open.
     var peer by remember(bot.id) { mutableStateOf<String?>(null) }
     var micDenied by remember { mutableStateOf(false) }
@@ -90,7 +93,7 @@ import com.kyant.shapes.Capsule
     val density = LocalDensity.current
     // The message the composer quotes, until it sends or this chat closes.
     var replyId by rememberSaveable(bot.id) { mutableStateOf<String?>(null) }
-    val replyTo = state.entries.firstOrNull { it.id == replyId && it.botId == bot.id }
+    val replyTo = state.entries.firstOrNull { it.id == replyId && it.botId == bot.id }?.replyQuote
     val reply = { entry: Entry -> replyId = entry.id }
     // The chat ignores Full conversation over it: it stays put underneath.
     val chatState = state.copy(trace = false)
@@ -98,7 +101,7 @@ import com.kyant.shapes.Capsule
         // Down to just above the header's bottom; the bottom one stops under Jump to latest.
         ScrollEdge(Edge.Top, top + 84.dp)
         ScrollEdge(Edge.Bottom, with(density) { composerHeight.toDp() } + 4.dp, Modifier.align(Alignment.BottomCenter))
-        ThreadHeader(bot, state, store, edit, { store.showTrace(true) }, { openRoutine(null) }, { confirmNewSession = true }, { confirmDelete = true })
+        ThreadHeader(bot, state, store, edit, { store.showTrace(true) }, { openRoutine(null) }, { library = true }, { confirmNewSession = true }, { confirmDelete = true })
         // The call floats over the chat under the header, as on iOS; the chat stays readable and usable.
         AnimatedVisibility(state.voice != null, Modifier.padding(top = top + 54.dp),
             enter = fadeIn(Motion.fade()) + slideInVertically(Motion.layoutOffset) { -it }, exit = fadeOut(Motion.fade()) + slideOutVertically(Motion.layoutOffset) { -it }) {
@@ -110,14 +113,15 @@ import com.kyant.shapes.Capsule
             // Nothing sent now could be read on the other side.
             val mismatch = state.mismatch
             if (mismatch != null) UpdateNeededCard(state, mismatch, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
-            else MessageComposer(bot, chatState, store, onCall = if (state.voice == null && state.actualConnection is LinkState.Ready) startCall else null,
+            // An artifact's viewer has its own box for the same draft; two would overwrite each other.
+            else if (viewing == null) MessageComposer(bot, chatState, store, onCall = if (state.voice == null && state.actualConnection is LinkState.Ready) startCall else null,
                 onInterrupt = if (state.voice?.botId == bot.id && state.voice.state.phase == VoicePhase.Speaking) store::interruptVoice else null,
                 replyTo = replyTo, cancelReply = { replyId = null })
         }
     }) {
         Transcript(bot, chatState, store, connect, PaddingValues(start = 16.dp, end = 16.dp, top = top + 60.dp,
             bottom = with(density) { composerHeight.toDp() } + 8.dp), indicatorTop = top + 50.dp, openRoutine = openRoutine, reply = reply,
-            addFallback = editFallbacks) { peer = it }
+            addFallback = editFallbacks, openArtifact = { viewing = it }) { peer = it }
     }
     CodyncDialog("Start a new session?", confirmNewSession, { confirmNewSession = false },
         message = "The conversation stays here, but the agent starts with a fresh context.") {
@@ -141,6 +145,8 @@ import com.kyant.shapes.Capsule
         AnalyticsOnAppear(AnalyticsEvent.ScreenViewed(AnalyticsScreen.Routines))
         RoutinesScreen(bot, state, store, routineId)
     }
+    CodyncSheet(library, { library = false }) { LibrarySheet(bot, state, store) { viewing = it } }
+    ArtifactLayer(viewing) { ArtifactViewer(it, bot, state, store) { viewing = null } }
     CodyncSheet(peer, { peer = null }) { BotConversationView(bot, it, state, store) }
     CodyncSheet(app, { app = null; setupEntry = null }) { ComposioConnectSheet(it, state, store, setupEntry) { store.refreshPlugins() } }
     CodyncSheet(connector, { connector = null; setupEntry = null }) { InstallConnectorSheet(it, state, store, setupEntry) }
@@ -148,7 +154,7 @@ import com.kyant.shapes.Capsule
 
 /** The glass back button, the title (its menu holds the bot's actions) and the connection under it. */
 @Composable private fun ThreadHeader(bot: Bot, state: AppState, store: AppStore, edit: (Bot) -> Unit, trace: () -> Unit,
-    routines: () -> Unit, newSession: () -> Unit, delete: () -> Unit) {
+    routines: () -> Unit, library: () -> Unit, newSession: () -> Unit, delete: () -> Unit) {
     Box(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 6.dp).padding(horizontal = 16.dp).height(44.dp)) {
         val (source, pressed) = rememberPress()
         Box(Modifier.align(Alignment.CenterStart).size(44.dp).glass(Capsule(), pressed = pressed)
@@ -173,6 +179,8 @@ import com.kyant.shapes.Capsule
             } else {
                 add(MenuItem("Edit profile", icon = "pencil") { edit(bot) }); add(pin)
                 add(MenuItem("Routines", icon = "clock.arrow.circlepath", action = routines))
+                // An older host has no Library.
+                if (hasLibrary(state.hello?.text("version"))) add(MenuItem("Library", icon = "books.vertical", action = library))
                 add(MenuItem("New session", icon = "arrow.counterclockwise", action = newSession))
                 add(MenuItem("Delete bot", icon = "trash", destructive = true, divider = true, action = delete))
             }
@@ -221,7 +229,8 @@ import com.kyant.shapes.Capsule
 
 /** The messages: all this phone has, earlier ones from the computer near the top, following the newest. */
 @Composable private fun Transcript(bot: Bot, state: AppState, store: AppStore, connect: ConnectionRequestActions, padding: PaddingValues,
-    indicatorTop: Dp, openRoutine: (String) -> Unit, reply: (Entry) -> Unit, addFallback: (Bot) -> Unit, openPeer: (String) -> Unit) {
+    indicatorTop: Dp, openRoutine: (String) -> Unit, reply: (Entry) -> Unit, addFallback: (Bot) -> Unit, openArtifact: (OpenArtifact) -> Unit,
+    openPeer: (String) -> Unit) {
     val entries = state.entries.filter { it.botId == bot.id && it.isChat }
     val pending = state.pending.filter { it.botId == bot.id }
     val items = chatItems(entries, pending)
@@ -246,7 +255,7 @@ import com.kyant.shapes.Capsule
                     else ChatRow(item.entry, item.groupStart, bot, state, store, openTrace = { store.showTrace(true) },
                         // An update card takes the composer's place, so there's nothing to reply with.
                         reply = if (item.entry.isReplyable && state.mismatch == null) { { reply(item.entry) } } else null, connect = connect,
-                        addFallback = addFallback)
+                        addFallback = addFallback, openArtifact = openArtifact)
                 }
                 is ChatItem.Pending -> PendingBubble(item.send, item.groupStart, state, store)
                 is ChatItem.Exchanges -> BotMessageRow(item.group, state) { openPeer(item.group.peerId) }

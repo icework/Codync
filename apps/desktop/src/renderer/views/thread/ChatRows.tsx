@@ -1,4 +1,5 @@
 import { FileDownloadCard } from './FileDownloadCard'
+import { ArtifactCard } from '../library/ArtifactCard'
 import { memo, useEffect, useRef, useState } from 'react'
 import { groupBotReactions, isGroup, isReplyable, isWorking, needsInput, type Bot, type Entry, type ReplyQuote } from '@shared/models'
 import { BotAvatar } from '../../components/Avatar'
@@ -25,7 +26,7 @@ export function reactionPick(store: BotStore, entry: Entry): ReactionPick {
 }
 
 /** One chat-visible entry, with what can be done to it. */
-export const ChatRow = memo(function ChatRow({ entry, groupStart, chat, openTrace, onReply, openAgent }: {
+export const ChatRow = memo(function ChatRow({ entry, groupStart, chat, openTrace, onReply, openAgent, openArtifact }: {
   entry: Entry
   groupStart: boolean
   chat: Bot | null
@@ -34,6 +35,8 @@ export const ChatRow = memo(function ChatRow({ entry, groupStart, chat, openTrac
   onReply?: (e: Entry) => void
   /** Opens a bot's Agent settings (a failure notice's "Add a fallback"). */
   openAgent?: (botId: string) => void
+  /** Opens an artifact card's artifact over the chat. */
+  openArtifact?: (artifactId: string) => void
 }) {
   const reply = onReply && isReplyable(entry) ? () => onReply(entry) : undefined
   switch (entry.kind) {
@@ -48,7 +51,7 @@ export const ChatRow = memo(function ChatRow({ entry, groupStart, chat, openTrac
       return (
         <VStack align="flex-start" gap={4} className={groupStart ? 'chat-row group-start' : 'chat-row'}>
           {chat && isGroup(chat) && groupStart ? <AuthorLabel botId={entry.data.author} /> : null}
-          <AgentBubble entry={entry} openTrace={openTrace} reply={reply} />
+          <AgentBubble entry={entry} openTrace={openTrace} reply={reply} openArtifact={openArtifact} />
           <VStack gap={4} className={chat && isGroup(chat) ? 'chat-row-indent' : undefined}>
             <ReactionsRow entry={entry} />
           </VStack>
@@ -171,7 +174,7 @@ function UserStatus({ entry, botWorking, hovering }: { entry: Entry; botWorking:
   }
 }
 
-export function AgentBubble({ entry, openTrace, reply }: { entry: Entry; openTrace: () => void; reply?: () => void }) {
+export function AgentBubble({ entry, openTrace, reply, openArtifact }: { entry: Entry; openTrace: () => void; reply?: () => void; openArtifact?: (artifactId: string) => void }) {
   const store = useStore()
   const [hovering, setHovering] = useState(false)
   const copy = () => entry.data.text && window.codync.app.copy(entry.data.text)
@@ -179,7 +182,7 @@ export function AgentBubble({ entry, openTrace, reply }: { entry: Entry; openTra
     <div className="message agent" title={fullDate.format(entry.createdAt)} onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)}>
       <div className="message-body">
         <Bubble
-          className={entry.data.files?.length ? "file-message" : "bubble agent"}
+          className={entry.data.files?.length || entry.data.artifact ? 'file-message' : 'bubble agent'}
           reactions={reactionPick(store, entry)}
           items={() => [
             { title: 'Copy', icon: 'square.on.square', action: copy },
@@ -187,7 +190,13 @@ export function AgentBubble({ entry, openTrace, reply }: { entry: Entry; openTra
             { title: 'Show what it did', icon: 'list.bullet', action: openTrace },
           ]}
         >
-          {entry.data.files?.length ? <div className="file-message-cards">{entry.data.files.map((file) => <FileDownloadCard key={file.id} entry={entry} file={file} />)}</div> : <MarkdownText text={entry.data.text ?? ''} />}
+          {entry.data.artifact ? (
+            <ArtifactCard botId={entry.botId} card={entry.data.artifact} open={() => openArtifact?.(entry.data.artifact!.id)} />
+          ) : entry.data.files?.length ? (
+            <div className="file-message-cards">{entry.data.files.map((file) => <FileDownloadCard key={file.id} entry={entry} file={file} />)}</div>
+          ) : (
+            <MarkdownText text={entry.data.text ?? ''} />
+          )}
         </Bubble>
         <MessageActions className="trailing" visible={hovering} reactions={reactionPick(store, entry)} reply={reply} trace={openTrace} copy={copy} />
       </div>

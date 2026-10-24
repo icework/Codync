@@ -1172,5 +1172,21 @@
   "Too many screen connections. Try again in a minute.": "화면 연결이 너무 많습니다. 1분 후 다시 시도하세요.",
   "Choose the language for this device. Unsupported system languages use English.": "이 기기의 언어를 선택하세요. 지원하지 않는 시스템 언어는 영어로 표시됩니다.",
   "resets in {time}": "{time} 후 초기화",
-  "Progress, step {step} of 4": "진행 상황, 4단계 중 {step}단계"
+  "Progress, step {step} of 4": "진행 상황, 4단계 중 {step}단계",
+  "Artifact": "아티팩트",
+  "Message about “{title}”": "“{title}”에 대해 메시지 보내기",
+  "Close artifact": "아티팩트 닫기",
+  "Rename artifact": "아티팩트 이름 변경",
+  "Artifact title": "아티팩트 제목",
+  "Save as HTML": "HTML로 저장",
+  "Open in browser": "브라우저에서 열기",
+  "Share artifact": "아티팩트 공유",
+  "Couldn't open the artifact": "아티팩트를 열 수 없습니다",
+  "This week": "이번 주",
+  "Earlier": "이전",
+  "Open": "열기",
+  "More actions": "작업 더 보기",
+  "Library": "라이브러리",
+  "Library is empty": "라이브러리가 비어 있습니다",
+  "Artifacts {name} makes and files shared in this chat show here.": "{name}이(가) 만든 아티팩트와 이 채팅에서 공유한 파일이 여기에 표시됩니다."
 }

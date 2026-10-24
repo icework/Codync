@@ -40,6 +40,7 @@ Source review, a passing build, local integration tests and production acceptanc
 - [Voice calls](features/voice-call.md)
 - [iOS Shortcuts](features/ios-shortcuts.md)
 - [File attachments](features/file-attachments.md)
+- [Artifacts and the Library](features/artifacts.md)
 - [Remote screen](features/remote-screen.md) and [computer use](features/computer-use.md)
 - [Computer identity and list ordering](features/computer-order.md)
 - [Notch island (desktop)](features/notch-island.md)

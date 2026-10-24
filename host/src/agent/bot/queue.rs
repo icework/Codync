@@ -40,6 +40,9 @@ impl Actor {
                 let _ = reply.send(self.react(&emoji, to.as_deref()));
             }
             Cmd::SendFile { path, name, cancelled, reply } => self.begin_file(path, name, cancelled, reply),
+            Cmd::PostArtifact { data, reply } => {
+                let _ = reply.send(self.post_artifact(data));
+            }
             Cmd::Stop => self.stop().await,
             Cmd::Permission { entry_id, option_id } => self.answer_permission(&entry_id, option_id).await,
             Cmd::Approve { title, detail, reply } => self.ask_approval(&title, &detail, reply),

@@ -1172,5 +1172,21 @@
   "Too many screen connections. Try again in a minute.": "Hay demasiadas conexiones de pantalla. Inténtalo de nuevo en un minuto.",
   "Choose the language for this device. Unsupported system languages use English.": "Elige el idioma de este dispositivo. Los idiomas del sistema no compatibles usan inglés.",
   "resets in {time}": "se restablece en {time}",
-  "Progress, step {step} of 4": "Progreso, paso {step} de 4"
+  "Progress, step {step} of 4": "Progreso, paso {step} de 4",
+  "Artifact": "Artefacto",
+  "Message about “{title}”": "Mensaje sobre «{title}»",
+  "Close artifact": "Cerrar artefacto",
+  "Rename artifact": "Cambiar nombre del artefacto",
+  "Artifact title": "Título del artefacto",
+  "Save as HTML": "Guardar como HTML",
+  "Open in browser": "Abrir en el navegador",
+  "Share artifact": "Compartir artefacto",
+  "Couldn't open the artifact": "No se pudo abrir el artefacto",
+  "This week": "Esta semana",
+  "Earlier": "Anteriores",
+  "Open": "Abrir",
+  "More actions": "Más acciones",
+  "Library": "Biblioteca",
+  "Library is empty": "La biblioteca está vacía",
+  "Artifacts {name} makes and files shared in this chat show here.": "Los artefactos que crea {name} y los archivos compartidos en este chat aparecen aquí."
 }

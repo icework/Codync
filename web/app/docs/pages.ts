@@ -56,6 +56,12 @@ export const docSections: { title: string; pages: DocPage[] }[] = [
           "Have a bot do work on a schedule or when a webhook arrives: set it up in the routine editor or by asking the bot.",
       },
       {
+        slug: "artifacts",
+        title: "Artifacts and the Library",
+        description:
+          "Pages a bot makes for you to come back to, such as reports and trackers, and the Library of everything made or shared in a chat.",
+      },
+      {
         slug: "memory",
         title: "Memory",
         description: "What a bot remembers about you across sessions, how it updates that memory, and what the apps show.",

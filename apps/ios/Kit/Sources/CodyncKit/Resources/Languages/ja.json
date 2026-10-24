@@ -1172,5 +1172,21 @@
   "Too many screen connections. Try again in a minute.": "画面接続が多すぎます。 1分後にもう一度試してください。",
   "Choose the language for this device. Unsupported system languages use English.": "このデバイスの言語を選択します。サポートされていないシステム言語では英語が使用されます。",
   "resets in {time}": "{time}でリセット",
-  "Progress, step {step} of 4": "進捗、4 段階中 {step} 段階目"
+  "Progress, step {step} of 4": "進捗、4 段階中 {step} 段階目",
+  "Artifact": "アーティファクト",
+  "Message about “{title}”": "「{title}」についてメッセージ",
+  "Close artifact": "アーティファクトを閉じる",
+  "Rename artifact": "アーティファクト名を変更",
+  "Artifact title": "アーティファクトのタイトル",
+  "Save as HTML": "HTML として保存",
+  "Open in browser": "ブラウザで開く",
+  "Share artifact": "アーティファクトを共有",
+  "Couldn't open the artifact": "アーティファクトを開けませんでした",
+  "This week": "今週",
+  "Earlier": "それ以前",
+  "Open": "開く",
+  "More actions": "その他の操作",
+  "Library": "ライブラリ",
+  "Library is empty": "ライブラリは空です",
+  "Artifacts {name} makes and files shared in this chat show here.": "{name} が作ったアーティファクトと、このチャットで共有したファイルがここに表示されます。"
 }

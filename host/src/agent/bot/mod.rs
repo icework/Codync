@@ -81,6 +81,12 @@ pub enum Cmd {
         cancelled: Arc<std::sync::atomic::AtomicBool>,
         reply: tokio::sync::oneshot::Sender<Result<()>>,
     },
+    /// An artifact the bot just published (`chat::artifacts`): its card (the entry's `data`) in the turn's chat. Answers
+    /// the card's entry id.
+    PostArtifact {
+        data: Value,
+        reply: tokio::sync::oneshot::Sender<Result<String>>,
+    },
     /// Its turn in a group's room turn.
     Group(GroupTurn),
     /// The group's room turns stopped: drop its queued turns, stop a running one.

@@ -99,6 +99,7 @@ Codync/
 | Fast mode (session config option) | `host/src/agent/config.rs`, `agent/bot/fast_mode.rs` |
 | Marketplace, Composio, connector OAuth | `host/src/market/` |
 | Skills a bot writes (`save_skill`) | `host/src/chat/skills.rs`, stored by `host/src/market/skills.rs` |
+| Artifacts (`publish_artifact`) and a chat's Library | `host/src/chat/artifacts.rs`, `library.rs`; desktop `apps/desktop/src/renderer/views/library/` (+ `src/main/artifacts.ts`); iPhone `apps/ios/Kit/Sources/CodyncUI/Artifacts/` (+ `Store/ArtifactCache.swift`, `BotStore+Artifacts.swift`); Android `ArtifactCardView.kt`, `ArtifactViewer.kt`, `ArtifactWebView.kt`, `LibrarySheet.kt`, `AppStoreArtifacts.kt` (+ `core/Artifact.kt`, `core/Library.kt`); terminal `host/src/tui/net/artifacts.rs`, `manage/library.rs` |
 | Screen bridge and built-in MCP tools | `host/src/screen/`, `mcp.rs` |
 | Swift transport and cloud API | `apps/ios/Kit/Sources/CodyncKit/Client/` |
 | Account aggregation / one host mirror | `apps/ios/Kit/Sources/CodyncUI/Store/AccountStore.swift` / `BotStore.swift` (+ `BotStore+Connection`, `+Sync`, `+Sending`, `+Actions`, `+Plugins`, `+Cache`, `+Shortcuts`) |

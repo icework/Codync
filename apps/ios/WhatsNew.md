@@ -9,6 +9,8 @@ a version without one gets a generic "Bug fixes and improvements" line. Delete o
 ## 2.25.0
 
 ### zh-Hant
+- Bot 可以做 Artifact：報告、追蹤表、儀表板這類要回來看的內容會以卡片出現在聊天裡，點開看完整內容，直接在下方留言請它改，改好就自動更新。
+- 每個 Bot 的「資料庫」收齊它做的 Artifact，以及聊天裡分享過的檔案和圖片。
 - 可以建立使用 Hermes Agent 的 Bot。
 - Bot 之間交辦工作不必等待，對方的回覆會回到發問的 Bot，再由它回覆你。
 - 鎖定畫面的即時動態加上進度條，四格依任務進度填滿，顏色跟著狀態走。
@@ -19,6 +21,8 @@ a version without one gets a generic "Bug fixes and improvements" line. Delete o
 - 新增「Send Text to Bot」捷徑，可選擇 Bot 並傳送文字；預設在背景傳送，也可開啟「Open Chat」顯示對話。
 
 ### en-US
+- Bots can make artifacts: reports, trackers and dashboards you come back to show as a card in the chat. Open one full screen and message the bot below it to change it; it updates in place.
+- Each bot's Library collects its artifacts and the files and images shared in the chat.
 - Create bots that run Hermes Agent.
 - Bots hand work to each other without waiting; the answer comes back to the bot that asked, which then replies to you.
 - Live Activities on the Lock Screen show a progress line that fills as the task moves, in the state's color.

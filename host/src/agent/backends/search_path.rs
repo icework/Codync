@@ -130,6 +130,33 @@ pub fn on_path(bin: &str) -> bool {
     which(bin).is_some()
 }
 
+/// Serializes tests that replace the search path: `cargo test` runs them at once.
+#[cfg(test)]
+static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+/// Holds the search path on `dir` until dropped, one test at a time.
+#[cfg(test)]
+#[must_use]
+pub(super) struct TestSearchPath {
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl TestSearchPath {
+    pub(super) fn set(dir: PathBuf) -> Self {
+        let lock = TEST_LOCK.locked();
+        *SEARCH_PATH.locked() = vec![dir];
+        Self { _lock: lock }
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestSearchPath {
+    fn drop(&mut self) {
+        SEARCH_PATH.locked().clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,19 +164,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn detects_executables_on_search_path() {
+        use std::os::unix::fs::PermissionsExt;
         let dir = std::env::temp_dir().join(format!("codync-bin-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let bin = dir.join("fake-harness");
         std::fs::write(&bin, "#!/bin/sh\n").unwrap();
-        *SEARCH_PATH.locked() = vec![dir.clone()];
+        let _path = TestSearchPath::set(dir.clone());
         assert!(which("fake-harness").is_none(), "not executable yet");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
         assert_eq!(which("fake-harness"), Some(bin));
-        SEARCH_PATH.locked().clear();
     }
 
     #[test]

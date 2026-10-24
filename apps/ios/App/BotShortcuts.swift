@@ -26,6 +26,8 @@ struct SendTextToBotIntent: ForegroundContinuableIntent {
     static let title: LocalizedStringResource = "Send Text to Bot"
     static let description = IntentDescription("Send text to a bot in the background. Optionally open its conversation. Finishes when the computer or its offline mailbox accepts the message.")
     static let openAppWhenRun = false
+    /// Runs in the background, also from Siri: a locked iPhone must not instruct a coding agent.
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @available(iOS 26.0, *)
     static var supportedModes: IntentModes { [.background, .foreground(.dynamic)] }

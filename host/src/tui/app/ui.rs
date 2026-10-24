@@ -84,6 +84,8 @@ pub const ACTIONS: [(&str, &str, Action); 16] = [
 pub enum GotoItem {
     Bot(String),
     Action(Action),
+    /// Shows a hidden bot in the roster again.
+    Unhide(String),
 }
 
 pub struct Goto {

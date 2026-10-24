@@ -697,7 +697,7 @@
   "Minimal": "Minimal",
   "The Dynamic Island shows the same Live Activity as the Lock Screen, so this switch turns off both.": "Die Dynamic Island zeigt dieselbe Live-Aktivität wie der Sperrbildschirm. Dieser Schalter deaktiviert daher beide.",
   "Starts when you send a task from this iPhone. Follow its progress, then open the conversation when your bot needs you.": "Beginnt, wenn du von diesem iPhone eine Aufgabe sendest. Verfolge den Fortschritt und öffne das Gespräch, wenn dein Bot dich braucht.",
-  "The bot in its mood, its current step in the state's color, the running time and a thinking orb. When the bot needs you, Review opens the request.": "Der Bot mit seiner Stimmung, sein aktueller Schritt in der Statusfarbe, die Laufzeit und eine Denkkugel. Wenn der Bot dich braucht, öffnet „Prüfen“ die Anfrage.",
+  "The bot in its mood, its current step in the state's color, the running time, a thinking orb and its progress. When the bot needs you, Review opens the request.": "Der Bot mit seiner Stimmung, sein aktueller Schritt in der Statusfarbe, die Laufzeit, eine Denkkugel und sein Fortschritt. Wenn der Bot dich braucht, öffnet „Prüfen“ die Anfrage.",
   "The bot and a thinking orb beside the camera, outlined in the state's color. The orb becomes a check or warning when the task ends.": "Der Bot und eine Denkkugel neben der Kamera, mit einer Umrandung in der Statusfarbe. Die Kugel wird am Aufgabenende zu einem Häkchen oder Warnzeichen.",
   "Just the orb when iOS displays multiple Live Activities.": "Nur die Kugel, wenn iOS mehrere Live-Aktivitäten anzeigt.",
   "Touch and hold the Dynamic Island for the current step and the running time, or Review when the bot needs you. Tap to open the conversation.": "Halte die Dynamic Island gedrückt, um den aktuellen Schritt und die Laufzeit zu sehen, oder „Prüfen“, wenn der Bot dich braucht. Tippe, um das Gespräch zu öffnen.",
@@ -797,6 +797,7 @@
   "Install Gemini CLI (npm install -g @google/gemini-cli) and run `gemini` to sign in with Google.": "Installiere Gemini CLI (npm install -g @google/gemini-cli) und starte `gemini`, um dich mit Google anzumelden.",
   "Install Copilot CLI (curl -fsSL https://gh.io/copilot-install | bash) and run `copilot login`.": "Installiere Copilot CLI (curl -fsSL https://gh.io/copilot-install | bash) und führe `copilot login` aus.",
   "Install Qwen Code (its standalone installer), run `qwen` and type /auth.": "Installiere Qwen Code mit seinem eigenständigen Installationsprogramm, starte `qwen` und gib /auth ein.",
+  "Install Hermes Agent and run `hermes acp --setup` to choose a provider and model.": "Installiere Hermes Agent und führe `hermes acp --setup` aus, um einen Anbieter und ein Modell auszuwählen.",
   "Install goose and run `goose configure`.": "Installiere goose und führe `goose configure` aus.",
   "Install Kimi Code (curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash) and run `kimi login`.": "Installiere Kimi Code (curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash) und führe `kimi login` aus.",
   "Install Droid (curl -fsSL https://app.factory.ai/cli | sh) and sign in with `droid`.": "Installiere Droid (curl -fsSL https://app.factory.ai/cli | sh) und melde dich mit `droid` an.",
@@ -827,6 +828,13 @@
   "Dreaming": "Gedächtnispflege",
   "{name}'s own memory": "Eigenes Gedächtnis von {name}",
   "About {name}'s own memory": "Über das eigene Gedächtnis von {name}",
+  "Shared": "Geteilt",
+  "{name} keeps notes apart from Codync's memory, and Codync can't turn them off for one bot.": "{name} führt Notizen getrennt von Codyncs Gedächtnis, und Codync kann sie nicht für einen einzelnen Bot ausschalten.",
+  "Shared by every bot": "Von allen Bots geteilt",
+  "Every bot that runs {name} reads and writes the same notes, and so does {name} when you use it outside Codync.": "Jeder Bot mit {name} liest und schreibt dieselben Notizen, und {name} selbst auch, wenn du es außerhalb von Codync nutzt.",
+  "Turning it off": "Ausschalten",
+  "Where {name} has a setting for it, that setting turns it off for every session at once.": "Wo {name} eine Einstellung dafür hat, schaltet sie es für alle Sitzungen auf einmal aus.",
+  "What this bot learned about you · {harness}'s own memory: shared by every {harness} bot": "Was dieser Bot über dich gelernt hat · Eigenes Gedächtnis von {harness}: von allen {harness}-Bots geteilt",
   "Turn on {name}'s own memory?": "Eigenes Gedächtnis von {name} einschalten?",
   "Tidying between chats": "Aufräumen zwischen Chats",
   "Adds and takes out": "Hinzufügen und Entfernen",
@@ -1163,5 +1171,6 @@
   "Remote screen relay is temporarily unavailable. Try again shortly.": "Das Remote-Bildschirm-Relay ist vorübergehend nicht verfügbar. Versuche es in Kürze erneut.",
   "Too many screen connections. Try again in a minute.": "Zu viele Bildschirmverbindungen. Versuche es in einer Minute erneut.",
   "Choose the language for this device. Unsupported system languages use English.": "Wähle die Sprache für dieses Gerät. Nicht unterstützte Systemsprachen verwenden Englisch.",
-  "resets in {time}": "Zurücksetzung in {time}"
+  "resets in {time}": "Zurücksetzung in {time}",
+  "Progress, step {step} of 4": "Fortschritt, Schritt {step} von 4"
 }

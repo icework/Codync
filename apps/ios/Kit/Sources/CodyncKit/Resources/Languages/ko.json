@@ -697,7 +697,7 @@
   "Minimal": "최소형",
   "The Dynamic Island shows the same Live Activity as the Lock Screen, so this switch turns off both.": "Dynamic Island는 잠금 화면과 같은 실시간 현황을 표시하므로 이 스위치를 끄면 둘 다 꺼집니다.",
   "Starts when you send a task from this iPhone. Follow its progress, then open the conversation when your bot needs you.": "이 iPhone에서 작업을 보내면 시작됩니다. 진행 상황을 확인하고 봇이 나를 필요로 할 때 대화를 여세요.",
-  "The bot in its mood, its current step in the state's color, the running time and a thinking orb. When the bot needs you, Review opens the request.": "봇의 표정, 상태 색상의 현재 단계, 실행 시간과 생각 중인 구체를 표시합니다. 도움이 필요하면 검토를 눌러 요청을 엽니다.",
+  "The bot in its mood, its current step in the state's color, the running time, a thinking orb and its progress. When the bot needs you, Review opens the request.": "봇의 표정, 상태 색상의 현재 단계, 실행 시간, 생각 중인 구체와 진행 상황을 표시합니다. 도움이 필요하면 검토를 눌러 요청을 엽니다.",
   "The bot and a thinking orb beside the camera, outlined in the state's color. The orb becomes a check or warning when the task ends.": "카메라 옆에 봇과 생각 중인 구체가 상태 색상의 테두리로 표시됩니다. 작업이 끝나면 구체가 체크 표시나 경고로 바뀝니다.",
   "Just the orb when iOS displays multiple Live Activities.": "iOS가 여러 실시간 현황을 표시할 때는 구체만 표시됩니다.",
   "Touch and hold the Dynamic Island for the current step and the running time, or Review when the bot needs you. Tap to open the conversation.": "Dynamic Island를 길게 누르면 현재 단계와 실행 시간을 볼 수 있습니다. 도움이 필요하면 검토가 표시됩니다. 탭하면 대화가 열립니다.",
@@ -797,6 +797,7 @@
   "Install Gemini CLI (npm install -g @google/gemini-cli) and run `gemini` to sign in with Google.": "Gemini CLI(npm install -g @google/gemini-cli)를 설치하고 `gemini`를 실행해 Google로 로그인하세요.",
   "Install Copilot CLI (curl -fsSL https://gh.io/copilot-install | bash) and run `copilot login`.": "Copilot CLI (curl -fsSL https://gh.io/copilot-install | bash)을 설치하고 `copilot login`을 실행하세요.",
   "Install Qwen Code (its standalone installer), run `qwen` and type /auth.": "Qwen Code의 독립 실행형 설치 프로그램으로 설치하고 `qwen`을 실행한 뒤 /auth를 입력하세요.",
+  "Install Hermes Agent and run `hermes acp --setup` to choose a provider and model.": "Hermes Agent를 설치하고 `hermes acp --setup`을 실행해 공급자와 모델을 선택하세요.",
   "Install goose and run `goose configure`.": "goose을 설치하고 `goose configure`을 실행하세요.",
   "Install Kimi Code (curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash) and run `kimi login`.": "Kimi Code (curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash)을 설치하고 `kimi login`을 실행하세요.",
   "Install Droid (curl -fsSL https://app.factory.ai/cli | sh) and sign in with `droid`.": "Droid (curl -fsSL https://app.factory.ai/cli | sh)을 설치하고 `droid`으로 로그인하세요.",
@@ -827,6 +828,13 @@
   "Dreaming": "기억 정리",
   "{name}'s own memory": "{name} 자체 기억",
   "About {name}'s own memory": "{name} 자체 기억 정보",
+  "Shared": "공유",
+  "{name} keeps notes apart from Codync's memory, and Codync can't turn them off for one bot.": "{name}은(는) Codync 기억과 별도로 메모를 남기며, Codync는 봇 하나에 대해서만 끌 수 없습니다.",
+  "Shared by every bot": "모든 봇이 공유",
+  "Every bot that runs {name} reads and writes the same notes, and so does {name} when you use it outside Codync.": "{name}을(를) 쓰는 모든 봇이 같은 메모를 읽고 쓰며, Codync 밖에서 {name}을(를) 쓸 때도 마찬가지입니다.",
+  "Turning it off": "끄는 방법",
+  "Where {name} has a setting for it, that setting turns it off for every session at once.": "{name}에 관련 설정이 있으면, 그 설정으로 모든 세션에서 한 번에 꺼집니다.",
+  "What this bot learned about you · {harness}'s own memory: shared by every {harness} bot": "이 봇이 알게 된 나에 관한 정보 · {harness} 자체 기억: 모든 {harness} 봇이 공유",
   "Turn on {name}'s own memory?": "{name} 자체 기억을 켤까요?",
   "Tidying between chats": "채팅 사이 정리",
   "Adds and takes out": "추가 및 삭제",
@@ -1163,5 +1171,6 @@
   "Remote screen relay is temporarily unavailable. Try again shortly.": "원격 화면 릴레이를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도하세요.",
   "Too many screen connections. Try again in a minute.": "화면 연결이 너무 많습니다. 1분 후 다시 시도하세요.",
   "Choose the language for this device. Unsupported system languages use English.": "이 기기의 언어를 선택하세요. 지원하지 않는 시스템 언어는 영어로 표시됩니다.",
-  "resets in {time}": "{time} 후 초기화"
+  "resets in {time}": "{time} 후 초기화",
+  "Progress, step {step} of 4": "진행 상황, 4단계 중 {step}단계"
 }

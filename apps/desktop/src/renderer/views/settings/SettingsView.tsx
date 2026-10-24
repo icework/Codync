@@ -24,6 +24,7 @@ import { VoiceChatSettingsView } from './VoiceChatSettingsView'
 import { ComputerAccessView } from '../computer-access/ComputerAccessView'
 import { FormSheet } from '../marketplace/pieces'
 import { AnalyticsSheet } from './AnalyticsSheet'
+import { HiddenBotsSection } from './HiddenBotsSection'
 
 /** The chat window's Settings: pages in a sidebar, ChatGPT's settings layout. */
 export type SettingsPage = 'general' | 'computers' | 'access' | 'voice' | 'usage' | 'updates'
@@ -217,6 +218,7 @@ function GeneralSettings() {
         </Switch>
       </CardSection>
       <PrivacySettings />
+      <HiddenBotsSection />
     </CardForm>
   )
 }

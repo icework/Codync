@@ -130,6 +130,10 @@ extension BotStore {
                 // before trying the normal API, instead of turning that race into a failure.
                 markLocal(nonce: nonce, botId: botId, status: "sending")
                 return await deliverWhenOnline(text, botId: botId, replyTo: replyTo, nonce: nonce)
+            } catch is CancellationError {
+                // The shortcut that sent it was cancelled: the failed message says enough.
+                markLocal(nonce: nonce, botId: botId, status: "failed")
+                return .failed
             } catch {
                 // A dropped relay link: the message's own "Failed to send" and Resend say enough.
                 if (error as? HostError)?.isTransient != true { lastError = error.localizedDescription }

@@ -15,9 +15,7 @@ struct OpenLiveModeIntent: AppIntent {
     }
 
     @MainActor func perform() async throws -> some IntentResult {
-        let store = try AppStore.shared.openShortcutBot(bot)
-        guard let ref = bot.reference(in: AppStore.shared.storage) else { throw HostError.unauthorized("Choose a bot from the current account.") }
-        try await store.requestVoiceCall(to: ref.botId)
+        try await AppStore.shared.openShortcutLive(bot)
         return .result()
     }
 }

@@ -4,8 +4,39 @@ import Foundation
 import UIKit
 
 extension AppStore {
-    func openShortcutBot(_ bot: ShortcutBotEntity) throws -> BotStore {
-        let (ref, store) = try shortcutTarget(bot)
+    func openShortcutLive(_ bot: ShortcutBotEntity) async throws {
+        let (ref, store) = try await shortcutTarget(bot)
+        show(ref)
+        try await store.requestVoiceCall(to: ref.botId)
+    }
+
+    func sendShortcutText(_ text: String, to bot: ShortcutBotEntity, openChat: Bool) async throws -> SendProgress {
+        let (ref, store) = try await shortcutTarget(bot)
+        if openChat {
+            show(ref)
+        } else if UIApplication.shared.applicationState == .background {
+            // Only the target's pending send retains a connection while the app is backgrounded.
+            accounts.setActive(false)
+        }
+        return try await store.sendAndWait(text, to: ref.botId)
+    }
+
+    /// Waits for Clerk to restore the account first: an intent can run before the scene's userID observer.
+    private func shortcutTarget(_ bot: ShortcutBotEntity) async throws -> (BotReference, BotStore) {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !account.isReady {
+            guard ContinuousClock.now < deadline else { throw HostError.unreachable }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try Task.checkCancellation()
+        switchAccount(to: account.userID)
+        guard let ref = bot.reference(in: storage), let store = accounts.store(for: ref.computerId) else {
+            throw ShortcutError.botUnavailable
+        }
+        return (ref, store)
+    }
+
+    private func show(_ ref: BotReference) {
         for store in accounts.stores.values { store.screenRequest = nil }
         account.showSwitcher = false
         showComputers = false
@@ -14,32 +45,5 @@ extension AppStore {
         tab = .bots
         accounts.selection = ref
         accounts.setActive(true)
-        return store
-    }
-
-    func sendShortcutText(_ text: String, to bot: ShortcutBotEntity, openChat: Bool) async throws -> SendProgress {
-        // A background launch has no scene's userID observer to restore the account context.
-        let deadline = ContinuousClock.now + .seconds(10)
-        while !account.isReady {
-            guard ContinuousClock.now < deadline else { throw HostError.unreachable }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        try Task.checkCancellation()
-        switchAccount(to: account.userID)
-        let (ref, store) = try shortcutTarget(bot)
-        if openChat {
-            _ = try openShortcutBot(bot)
-        } else if UIApplication.shared.applicationState != .active {
-            // Only the target's pending send retains a connection while the app is backgrounded.
-            accounts.setActive(false)
-        }
-        return try await store.sendAndWait(text, to: ref.botId)
-    }
-
-    private func shortcutTarget(_ bot: ShortcutBotEntity) throws -> (BotReference, BotStore) {
-        guard let ref = bot.reference(in: storage), let store = accounts.store(for: ref.computerId) else {
-            throw HostError.http(404, "This bot isn't available in the current account. Open Codync and choose a bot again in the shortcut.")
-        }
-        return (ref, store)
     }
 }

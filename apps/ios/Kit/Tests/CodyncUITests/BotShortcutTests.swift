@@ -115,6 +115,10 @@ private struct RefusingSendTransport: HostTransport {
     if case .queued = progress {} else { Issue.record("Expected queued") }
     #expect(await remote.enqueued.count == 1)
     #expect(await remote.sent.isEmpty)
+    // A cancelled enqueue fails the message without an error dialog.
+    await remote.failEnqueue(CancellationError())
+    await #expect(throws: ShortcutError.notSent) { try await store.sendAndWait("cancelled", to: "b1") }
+    #expect(store.lastError == nil)
     await #expect(throws: (any Error).self) { try await store.requestVoiceCall(to: "b1") }
     #expect(store.voiceCallRequest == nil)
 }

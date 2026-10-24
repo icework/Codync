@@ -38,6 +38,7 @@ Source review, a passing build, local integration tests and production acceptanc
 - [Agent fallbacks](features/agent-fallback.md) (the next agent carries a turn on when the bot's own runs out of usage)
 - [Routines](features/routines.md)
 - [Voice calls](features/voice-call.md)
+- [iOS Shortcuts](features/ios-shortcuts.md)
 - [File attachments](features/file-attachments.md)
 - [Remote screen](features/remote-screen.md) and [computer use](features/computer-use.md)
 - [Computer identity and list ordering](features/computer-order.md)

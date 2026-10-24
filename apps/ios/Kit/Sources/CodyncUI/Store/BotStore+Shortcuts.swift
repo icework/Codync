@@ -1,6 +1,19 @@
 import CodyncKit
 import Foundation
 
+/// Why a Shortcuts action stopped; Shortcuts shows the description.
+public enum ShortcutError: LocalizedError {
+    case botUnavailable, emptyText, notSent
+
+    public var errorDescription: String? {
+        switch self {
+        case .botUnavailable: "This bot isn't available. Open Codync and choose a bot again in the shortcut."
+        case .emptyText: "Enter some text to send to the bot."
+        case .notSent: "Couldn't send the message. Check the conversation and retry the failed message."
+        }
+    }
+}
+
 extension BotStore {
     /// Wait for the connection before choosing normal delivery or the relay mailbox.
     private func prepareShortcut(to botId: String, allowQueue: Bool = false) async throws {
@@ -20,9 +33,7 @@ extension BotStore {
         try Task.checkCancellation()
         guard !retired else { throw CancellationError() }
         guard mismatch == nil else { throw HostError.upgradeRequired }
-        guard let bot = bots[botId], !bot.hidden else {
-            throw HostError.http(404, "This bot is no longer available. Choose another bot in the shortcut.")
-        }
+        guard let bot = bots[botId], !bot.hidden else { throw ShortcutError.botUnavailable }
     }
 
     public func requestVoiceCall(to botId: String) async throws {
@@ -50,9 +61,7 @@ extension BotStore {
 
     /// Shortcuts finish only after the host or mailbox has accepted the message.
     public func sendAndWait(_ text: String, to botId: String) async throws -> SendProgress {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw HostError.http(400, "Enter some text to send to the bot.")
-        }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ShortcutError.emptyText }
         try beginShortcutSend()
         defer { endShortcutSend() }
         try await prepareShortcut(to: botId, allowQueue: true)
@@ -67,9 +76,7 @@ extension BotStore {
             delivery.cancel()
         }
         guard !retired else { throw CancellationError() }
-        if case .failed = progress {
-            throw HostError.http(503, "Couldn't send the message. Check the conversation and retry the failed message.")
-        }
+        if case .failed = progress { throw ShortcutError.notSent }
         return progress
     }
 }

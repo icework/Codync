@@ -67,16 +67,7 @@ public struct ThreadView: View {
         chrome(chat)
             .readingConversation(botId)
             .onChange(of: model.voiceCallRequest, initial: true) { _, _ in
-                if model.takeVoiceCallRequest(for: botId) {
-                    showTrace = false
-                    botChat = nil
-                    editingGroup = false
-                    details = nil
-                    confirmNewSession = false
-                    confirmDelete = nil
-                    if model.fileDownloads.export?.botId == botId { model.fileDownloads.dismissExport() }
-                    withAnimation(Motion.reduced(Motion.layout, reduceMotion)) { calling = true }
-                }
+                if model.takeVoiceCallRequest(for: botId) { startShortcutCall() }
             }
             .codyncSheet(item: Binding<FileDownloads.Export?>(get: {
                 guard let item = model.fileDownloads.export, item.botId == botId else { return nil }
@@ -99,6 +90,18 @@ public struct ThreadView: View {
                 [DialogAction("New session") { model.newSession(botId) }]
             }
             .deleteBotConfirmation($confirmDelete) { dismiss() }
+    }
+
+    /// Open Live Mode from Shortcuts: closes whatever covers the chat, then starts the call.
+    private func startShortcutCall() {
+        showTrace = false
+        botChat = nil
+        editingGroup = false
+        details = nil
+        confirmNewSession = false
+        confirmDelete = nil
+        if model.fileDownloads.export?.botId == botId { model.fileDownloads.dismissExport() }
+        withAnimation(Motion.reduced(Motion.layout, reduceMotion)) { calling = true }
     }
 
     // MARK: rows

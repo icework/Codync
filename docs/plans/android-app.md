@@ -77,6 +77,8 @@ was walked through on an emulator against a real host.
   `AttachmentFiles.kt`).
 - **Pull to refresh** on the roster and in Settings uses the chat's indicator; iOS uses the system one.
 - **`computers` / `plugins` links** open over the current tab; iOS switches to Bots first.
+- **Shortcuts actions** (Open Live Mode, Send Text to Bot) are an Apple App Intents integration with no
+  Android counterpart ([iOS Shortcuts](../features/ios-shortcuts.md)).
 - **On-device voice**: languages other than English need Android 13+ and Android's on-device
   recognizer; it never falls back to online recognition (iOS may use Apple's servers).
 - **Jump to latest** is an opaque disc: it sits in the scrolling content, so there's no blur under it.

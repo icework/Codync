@@ -81,6 +81,7 @@ public final class BotStore {
 
     /// A Shortcuts request, consumed by the matching conversation.
     public internal(set) var voiceCallRequest: String?
+    @ObservationIgnored var preparingVoiceCall: UUID?
 
     // Platform hooks (push registration, Live Activities, widgets).
     /// Each time the channel becomes ready.

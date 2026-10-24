@@ -11,7 +11,7 @@ Live brings Codync to the foreground. The text action only brings it forward whe
 
 Only visible bots on computers the currently selected account can reach are offered. Stored selections carry the account scope and computer identity; switching accounts, removing the computer, or deleting/hiding the bot requires choosing a current bot again. Bots with the same name show their computer name. An empty list means Codync has no cached eligible bots yet: open Codync and let the computer sync.
 
-The text action uses the existing message path, including nonce-based retry and the relay mailbox. It preserves the conversation's unsent draft. Empty input and delivery failures throw an error rather than report success. Canceling the action stops pending delivery retries; it cannot retract a message already accepted by the computer or mailbox. Live waits for the connection and bot catch-up; an offline computer produces an error rather than starting a disconnected call.
+The text action uses the existing message path, including nonce-based retry and the relay mailbox. It preserves the conversation's unsent draft. Empty input and delivery failures throw an error rather than report success. Canceling the action stops pending delivery retries; it cannot retract a message already accepted by the computer or mailbox. Live waits for the connection and bot catch-up; an offline computer produces an error rather than starting a disconnected call. Leaving the selected conversation invalidates its pending Live request, including a request still waiting for the connection. Returning to that bot later does not start an abandoned call.
 
 ## Ownership and platforms
 

@@ -26,8 +26,19 @@ extension BotStore {
     }
 
     public func requestVoiceCall(to botId: String) async throws {
+        let request = UUID()
+        preparingVoiceCall = request
+        voiceCallRequest = nil
+        defer { if preparingVoiceCall == request { preparingVoiceCall = nil } }
         try await prepareShortcut(to: botId)
+        guard preparingVoiceCall == request else { throw CancellationError() }
         Motion.animate { voiceCallRequest = botId }
+    }
+
+    /// Leaving a conversation invalidates both its queued request and any connection wait.
+    func cancelVoiceCallRequest() {
+        preparingVoiceCall = nil
+        voiceCallRequest = nil
     }
 
     /// Consumed once, including when the conversation was already on screen.

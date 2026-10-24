@@ -2,7 +2,7 @@ import CodyncKit
 import Foundation
 
 extension BotStore {
-    /// Wait for the foreground connection before choosing normal delivery or the relay mailbox.
+    /// Wait for the connection before choosing normal delivery or the relay mailbox.
     private func prepareShortcut(to botId: String, allowQueue: Bool = false) async throws {
         do {
             let deadline = ContinuousClock.now + Self.actionPatience
@@ -42,6 +42,8 @@ extension BotStore {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw HostError.http(400, "Enter some text to send to the bot.")
         }
+        try beginShortcutSend()
+        defer { endShortcutSend() }
         try await prepareShortcut(to: botId, allowQueue: true)
         guard let delivery = send(text, to: botId, replyTo: nil, nonce: UUID().uuidString) else {
             throw CancellationError()

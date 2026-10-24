@@ -22,10 +22,13 @@ struct OpenLiveModeIntent: AppIntent {
     }
 }
 
-struct SendTextToBotIntent: AppIntent {
+struct SendTextToBotIntent: ForegroundContinuableIntent {
     static let title: LocalizedStringResource = "Send Text to Bot"
-    static let description = IntentDescription("Send text to a bot and open its conversation. Finishes when the computer or its offline mailbox accepts the message.")
-    static let openAppWhenRun = true
+    static let description = IntentDescription("Send text to a bot in the background. Optionally open its conversation. Finishes when the computer or its offline mailbox accepts the message.")
+    static let openAppWhenRun = false
+
+    @available(iOS 26.0, *)
+    static var supportedModes: IntentModes { [.background, .foreground(.dynamic)] }
 
     @Parameter(title: "Bot", requestValueDialog: "Which bot should receive the text?")
     var bot: ShortcutBotEntity
@@ -33,14 +36,22 @@ struct SendTextToBotIntent: AppIntent {
     @Parameter(title: "Text", requestValueDialog: "What would you like to send?")
     var text: String
 
+    @Parameter(title: "Open Chat", default: false)
+    var openChat: Bool
+
     static var parameterSummary: some ParameterSummary {
-        Summary("Send \(\.$text) to \(\.$bot)")
+        Summary("Send \(\.$text) to \(\.$bot)") { \.$openChat }
     }
 
     @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
-        let store = try AppStore.shared.openShortcutBot(bot)
-        guard let ref = bot.reference(in: AppStore.shared.storage) else { throw HostError.unauthorized("Choose a bot from the current account.") }
-        let progress = try await store.sendAndWait(text, to: ref.botId)
+        if openChat {
+            if #available(iOS 26.0, *) {
+                try await continueInForeground(alwaysConfirm: false)
+            } else {
+                try await requestToContinueInForeground()
+            }
+        }
+        let progress = try await AppStore.shared.sendShortcutText(text, to: bot, openChat: openChat)
         if case .queued = progress { return .result(dialog: "Message queued for the offline computer.") }
         return .result(dialog: "Message sent.")
     }

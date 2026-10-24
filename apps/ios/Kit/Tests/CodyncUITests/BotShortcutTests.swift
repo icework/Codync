@@ -118,3 +118,60 @@ private struct RefusingSendTransport: HostTransport {
     await #expect(throws: (any Error).self) { try await store.requestVoiceCall(to: "b1") }
     #expect(store.voiceCallRequest == nil)
 }
+
+@MainActor @Test func backgroundShortcutConnectsWithoutSelectingChatAndDisconnectsAfterAcceptance() async throws {
+    let suite = "BotShortcutTests.\(UUID().uuidString)"
+    defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+    let remote = FakeRemote(.ready(.direct))
+    let store = shortcutStore(SharedStore.Context(accountID: nil, suite: suite), remote: remote)
+    defer { store.retire() }
+    store.setActive(false)
+    let sending = Task { try await store.sendAndWait("background text", to: "b1") }
+    #expect(await until { await remote.subscribed })
+    await remote.emit(#"{"type":"hello","hostId":"h1","rev":1}"#)
+    await remote.emit(#"{"type":"bot","bot":{"id":"b1","name":"Ada","rev":1}}"#)
+    let progress = try await sending.value
+    if case .delivered = progress {} else { Issue.record("Expected delivered") }
+    #expect(store.selection == nil)
+    #expect(store.voiceCallRequest == nil)
+    #expect(store.shortcutSends == 0)
+    #expect(await remote.sent == ["background text"])
+    #expect(await until { await remote.shutdownCount == 1 })
+}
+
+@MainActor @Test func backgroundShortcutKeepsRetryAliveUntilCancelled() async throws {
+    let suite = "BotShortcutTests.\(UUID().uuidString)"
+    defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+    let remote = FakeRemote(.ready(.direct))
+    await remote.fail("send", times: 1)
+    let store = shortcutStore(SharedStore.Context(accountID: nil, suite: suite), remote: remote)
+    defer { store.retire() }
+    store.setActive(true)
+    #expect(await until { await remote.subscribed })
+    await remote.emit(#"{"type":"hello","hostId":"h1","rev":1}"#)
+    await remote.emit(#"{"type":"bot","bot":{"id":"b1","name":"Ada","rev":1}}"#)
+    let sending = Task { try await store.sendAndWait("cancel background retry", to: "b1") }
+    #expect(await until { await remote.calls.contains("send") })
+    store.setActive(false)
+    #expect(await remote.shutdownCount == 0)
+    sending.cancel()
+    await #expect(throws: CancellationError.self) { try await sending.value }
+    #expect(store.shortcutSends == 0)
+    #expect(await until { await remote.shutdownCount == 1 })
+    #expect(await remote.sent.isEmpty)
+}
+
+@MainActor @Test func retiringStoreClosesTransportDuringBackgroundShortcut() async throws {
+    let suite = "BotShortcutTests.\(UUID().uuidString)"
+    defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+    let remote = FakeRemote(.connecting)
+    let store = shortcutStore(SharedStore.Context(accountID: nil, suite: suite), remote: remote)
+    store.setActive(false)
+    let sending = Task { try await store.sendAndWait("retired", to: "b1") }
+    #expect(await until { store.shortcutSends == 1 && store.transport != nil })
+    store.retire()
+    await #expect(throws: (any Error).self) { try await sending.value }
+    #expect(store.shortcutSends == 0)
+    #expect(await until { await remote.shutdownCount == 1 })
+    #expect(await remote.sent.isEmpty)
+}

@@ -116,6 +116,7 @@ public final class BotStore {
         let end: @MainActor () -> Void
     }
     @ObservationIgnored var voiceCalls: [UUID: VoiceCall] = [:]
+    @ObservationIgnored var shortcutSends = 0
     var saveTask: Task<Void, Never>?
     var rewound = false
     /// Events stayed undecodable after the rewind.

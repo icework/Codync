@@ -4,7 +4,8 @@
 //! Chat model (from Grok Bot): the chat only shows user messages, the *final*
 //! agent message of each turn, permission cards and notices. Narration between
 //! tool calls, thoughts, tool calls and plans are trace entries shown in the
-//! "full conversation" sheet, and surface live as the roster activity line.
+//! "full conversation" sheet, and surface live as the activity line and the
+//! working steps a chat unfolds.
 //!
 //! Context (from Grok Bot too): the bot's instructions and memory are a frozen
 //! snapshot per session and compaction epoch (`context`), finished turns feed
@@ -23,6 +24,7 @@ mod launch;
 mod lifecycle;
 mod queue;
 mod session;
+mod tool_entry;
 mod turn;
 mod updates;
 

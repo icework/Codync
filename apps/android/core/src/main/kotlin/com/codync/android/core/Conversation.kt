@@ -41,6 +41,15 @@ data class Entry(
         kind == "notice" && "memory" !in data && "memoryFile" !in data && "compaction" !in data &&
             (data["handoff"] as? JsonObject)?.text("status") != "kept" ||
         kind == "agent" && data["final"]?.jsonPrimitive?.booleanOrNull == true
+    /** A step the working indicator unfolds: thinking, narration, a tool call or a plan; never the bot's bookkeeping,
+     *  nor a call the host didn't flag (one older than 2.25.0 flags none). */
+    val isWorkingStep: Boolean get() = when (kind) {
+        "thought" -> text.isNotBlank()
+        "agent" -> data["final"]?.jsonPrimitive?.booleanOrNull != true && !isPass(text)
+        "tool" -> data["bookkeeping"]?.jsonPrimitive?.booleanOrNull == false
+        "plan" -> true
+        else -> false
+    }
     /** A message the user can quote in a reply: theirs, or a final reply (a group member's too). */
     val isReplyable: Boolean get() = kind == "user" || kind == "agent" && data["final"]?.jsonPrimitive?.booleanOrNull == true
     /** The message this one replies to, as the computer quoted it. */
@@ -53,6 +62,10 @@ data class Entry(
     val replyQuote: ReplyQuote get() = ReplyQuote(id, if (kind == "user") "user" else data.text("author") ?: botId, quotePreview.take(500))
 
     companion object {
+        /** No text, or a pass the host keeps out of the chat (`is_pass` in host/src/chat/group.rs). */
+        private fun isPass(text: String) =
+            text.trim().trim('"', '.', '*').lowercase().let { it.isEmpty() || it == "(pass)" || it == "pass" }
+
         fun decode(value: JsonObject): Entry {
             val entry = WireJson.decodeFromJsonElement<Entry>(value)
             require(entry.id.isNotBlank() && entry.botId.isNotBlank() && entry.kind.isNotBlank() && entry.seq >= 0 && entry.rev >= 0) {

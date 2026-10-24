@@ -20,6 +20,7 @@ import { Composer } from './Composer'
 import { ChatSidePanel } from './ChatSidePanel'
 import { DetailsPanel, type DetailsTab } from './DetailsPanel'
 import { TraceView } from './TraceView'
+import { workingSteps } from './trace-turns'
 import { useReading } from './reading'
 import { GroupEditorView } from '../bots/GroupEditorView'
 import { BotTemplateView } from '../bots/BotTemplateView'
@@ -275,6 +276,7 @@ const Transcript = memo(function Transcript({ botId, openTrace, onReply, openRou
   // Rebuilt only when this chat changes: the store replaces a chat's list on every change.
   const entries = store.allEntries(botId)
   const all = useMemo(() => buildChat(entries), [entries])
+  const steps = useMemo(() => workingSteps(entries), [entries])
   // The newest 40 items first; older pages come in near the top.
   const [firstShown, setFirstShown] = useState<string | null>(null)
   const [loadingEarlier, setLoadingEarlier] = useState(false)
@@ -376,7 +378,7 @@ const Transcript = memo(function Transcript({ botId, openTrace, onReply, openRou
               <Row item={item} chat={bot} openTrace={openTrace} onReply={onReply} openRoutine={openRoutine} openAgent={openAgent} openBotChat={openBotChat} openArtifact={openArtifact} />
             </div>
           ))}
-          {bot ? <WorkingTransition bot={bot} visible={live} /> : null}
+          {bot ? <WorkingTransition bot={bot} visible={live} steps={steps} /> : null}
           <div className="chat-end" />
         </div>
       </div>

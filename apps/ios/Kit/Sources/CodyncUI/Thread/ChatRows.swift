@@ -260,28 +260,85 @@ struct NoticeRow: View {
     }
 }
 
-/// The bot's current activity and elapsed time.
+/// The bot's current activity and elapsed time; once the turn has steps, a tap unfolds them.
 struct WorkingIndicator: View {
     let bot: Bot
+    let steps: [Entry]
+    @State private var expanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let open = expanded && !steps.isEmpty
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        VStack(alignment: .leading, spacing: 0) {
+            if steps.isEmpty {
+                status(open: false)
+            } else {
+                Button {
+                    withAnimation(Motion.reduced(Motion.layout, reduceMotion)) { expanded.toggle() }
+                } label: {
+                    status(open: open).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(L10n.tr(open ? "Hide steps" : "Show steps"))
+                .accessibilityValue(open ? "Expanded" : "Collapsed")
+            }
+            if open {
+                WorkingSteps(steps: steps)
+                    .padding(.top, 12)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: open ? .infinity : nil, alignment: .leading)
+        .background(Palette.bubbleAgent, in: shape)
+        // Folding steps never cross the pill's edge.
+        .clipShape(shape)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.trailing, 40)
+    }
+
+    private func status(open: Bool) -> some View {
         HStack(spacing: 8) {
             ThinkingOrb(state: bot.needsInput ? .listening : .working, size: 16, color: bot.needsInput ? Palette.warning : Palette.secondary)
             Text(L10n.tr(bot.activity.isEmpty ? "Working…" : bot.activity))
                 .font(.subheadline)
                 .foregroundStyle(bot.needsInput ? Palette.warning : Palette.secondary)
                 .lineLimit(1)
+                .frame(maxWidth: open ? .infinity : nil, alignment: .leading)
             if let started = bot.startedAt {
                 Text(Date(milliseconds: started), style: .timer)
                     .font(.footnote.monospacedDigit())
                     .foregroundStyle(Palette.tertiary)
             }
+            if !steps.isEmpty {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Palette.tertiary)
+                    .rotationEffect(.degrees(open ? 90 : 0))
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Palette.bubbleAgent, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.trailing, 40)
+    }
+}
+
+/// The turn's thinking, narration, tool calls and plan: hugs them, scrolls once they're taller than
+/// 280 points, and keeps the newest in view. One scroll view, so what the reader unfolds stays unfolded.
+private struct WorkingSteps: View {
+    let steps: [Entry]
+
+    var body: some View {
+        CappedHeight(max: 280) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(steps) { TraceRow(entry: $0, unfolded: true) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+            .defaultScrollAnchor(.bottom)
+        }
     }
 }
 

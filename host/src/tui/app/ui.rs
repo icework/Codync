@@ -329,6 +329,8 @@ pub enum Click {
     },
     Filter(usize),
     Composer,
+    /// The working line: unfolds or folds the turn's steps.
+    Steps,
     /// A bot-message row (entry id): opens the conversation.
     BotChat(String),
 }

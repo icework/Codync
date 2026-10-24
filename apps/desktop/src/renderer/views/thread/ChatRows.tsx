@@ -1,14 +1,13 @@
 import { FileDownloadCard } from './FileDownloadCard'
 import { ArtifactCard } from '../library/ArtifactCard'
-import { memo, useEffect, useRef, useState } from 'react'
-import { groupBotReactions, isGroup, isReplyable, isWorking, needsInput, type Bot, type Entry, type ReplyQuote } from '@shared/models'
+import { memo, useRef, useState } from 'react'
+import { groupBotReactions, isGroup, isReplyable, isWorking, type Bot, type Entry, type ReplyQuote } from '@shared/models'
 import { BotAvatar } from '../../components/Avatar'
 import { Button, IconButton } from '../../components/Controls'
 import { Icon } from '../../components/Icon'
 import { AnchoredMenu, useContextMenu, type MenuItem, type ReactionPick } from '../../components/Overlay'
 import { HStack, VStack } from '../../components/Stack'
 import { Text } from '../../components/Text'
-import { ThinkingOrb } from '../../components/ThinkingOrb'
 import { messagePreview } from '../../lib/message-preview'
 import { useTr } from '../../lib/use-language'
 import { avatarColor } from '../../lib/theme'
@@ -229,37 +228,6 @@ export function NoticeRow({ entry, addFallback }: { entry: Entry; addFallback?: 
     default:
       return <Text as="div" size="footnote" tone="secondary" className="chat-notice">{text}</Text>
   }
-}
-
-/** The bot's current activity and elapsed time. */
-export function WorkingIndicator({ bot }: { bot: Bot }) {
-  const tr = useTr()
-  const waiting = needsInput(bot)
-  return (
-    <VStack align="flex-start" className="agent-inset">
-      <div className="working">
-        <HStack as="span" gap={8}>
-          <ThinkingOrb state={waiting ? 'listening' : 'working'} size={16} color={waiting ? 'var(--warning)' : 'var(--secondary)'} />
-          <Text size="subheadline" tone={waiting ? 'attention' : 'secondary'} truncate>{tr(bot.activity || 'Working…')}</Text>
-          {bot.startedAt ? <Timer since={bot.startedAt} /> : null}
-        </HStack>
-      </div>
-    </VStack>
-  )
-}
-
-/** `Text(date, style: .timer)`: 0:42, 12:05, 1:02:33. */
-function Timer({ since }: { since: number }) {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [])
-  const s = Math.max(0, Math.floor((now - since) / 1000))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = String(s % 60).padStart(2, '0')
-  return <Text size="footnote" tone="tertiary" tabular>{h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`}</Text>
 }
 
 /** A message's reactions: the user's (clicking one takes it back), then the bots', each emoji with the avatars of the

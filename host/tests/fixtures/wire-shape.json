@@ -132,6 +132,7 @@
     "event:entry(tool).entry.createdAt": "number",
     "event:entry(tool).entry.data": "object",
     "event:entry(tool).entry.data.author": "string",
+    "event:entry(tool).entry.data.bookkeeping": "bool",
     "event:entry(tool).entry.data.diffs": "array",
     "event:entry(tool).entry.data.diffs[]": "object",
     "event:entry(tool).entry.data.diffs[].added": "number",

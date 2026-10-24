@@ -965,6 +965,8 @@
   "Session timeline": "세션 타임라인",
   "Set by bot": "봇이 설정함",
   "Show what it did": "수행한 내용 보기",
+  "Show steps": "단계 보기",
+  "Hide steps": "단계 숨기기",
   "Sign in on the page that opened. This updates by itself when you're done.": "열린 페이지에서 로그인하세요. 완료하면 자동으로 갱신됩니다.",
   "Sign in to see the other computers in your account.": "계정의 다른 컴퓨터를 보려면 로그인하세요.",
   "Sign-in link copied: open it on this computer, then ^r refreshes": "로그인 링크 복사됨: 이 컴퓨터에서 연 뒤 ^r로 새로고침",

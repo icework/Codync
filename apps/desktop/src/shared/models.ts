@@ -287,6 +287,9 @@ export interface EntryData {
   clientNonce?: string
   title?: string
   toolKind?: string
+  /** tool: whether it's the bot's own bookkeeping (composing its message, keeping its memory), left out of the
+   * working steps; a host older than 2.25.0 leaves it out, and the steps then leave out the call too. */
+  bookkeeping?: boolean
   output?: string
   diffs?: FileDiff[]
   locations?: { path: string; line?: number }[]

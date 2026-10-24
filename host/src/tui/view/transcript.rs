@@ -32,9 +32,10 @@ fn turn_info(entries: &[&Entry]) -> HashMap<i64, TurnInfo> {
     let mut m: HashMap<i64, TurnInfo> = HashMap::new();
     for e in entries {
         let ti = m.entry(e.turn).or_insert_with(|| TurnInfo { steps: 0, files: BTreeSet::new(), last_message: None });
+        // Counted as the working line counts them while the turn runs.
+        ti.steps += usize::from(e.is_working_step());
         match e.kind {
             Kind::Tool => {
-                ti.steps += 1;
                 for d in e.data["diffs"].as_array().into_iter().flatten() {
                     if let Some(p) = d["path"].as_str() {
                         ti.files.insert(p.to_owned());
@@ -84,9 +85,9 @@ pub(super) fn build_chat(app: &App, b: &Bot, width: usize) -> Built {
     }
     // A turn in flight: who's on it and what they're doing.
     // A message doesn't end the turn: the bot may send several.
-    if app.online && matches!(b.status, Status::Working | Status::NeedsInput) && b.works_here() {
+    if app.shows_activity(b) {
         super::activity::activity(&mut out, app, b, &entries, width);
-    } else if let Some(group) = b.away().filter(|_| matches!(b.status, Status::Working | Status::NeedsInput)) {
+    } else if let Some(group) = b.away().filter(|_| b.busy()) {
         // Busy in a group it's in.
         let place = app.author_name(Some(group));
         gap(&mut out);

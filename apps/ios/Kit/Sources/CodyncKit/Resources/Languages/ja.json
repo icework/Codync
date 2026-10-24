@@ -965,6 +965,8 @@
   "Session timeline": "セッションのタイムライン",
   "Set by bot": "ボットで設定",
   "Show what it did": "それが何をしたかを見せてください",
+  "Show steps": "ステップを表示",
+  "Hide steps": "ステップを隠す",
   "Sign in on the page that opened. This updates by itself when you're done.": "開いたページでサインインします。完了すると、これは自動的に更新されます。",
   "Sign in to see the other computers in your account.": "サインインして、アカウント内の他のコンピューターを表示します。",
   "Sign-in link copied: open it on this computer, then ^r refreshes": "サインイン リンクがコピーされました: このコンピュータで開くと、^r が更新されます",

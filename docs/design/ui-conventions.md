@@ -123,7 +123,10 @@ and states.
 
 - A chat shows the latest non-final agent segment only while its turn is
   working and connected. Earlier narration, tools, empty text and `(pass)` stay out
-  of chat. Completed replies remain visible.
+  of the message list: the running turn's thinking, narration, tool calls (not the
+  bot's bookkeeping) and plan appear only in the working pill's unfolded steps
+  ([while it works](../features/chat-messages.md#while-it-works)), and every turn's in
+  Full conversation. Completed replies remain visible.
 - TUI keeps text and attachments in the composer until sending succeeds. A failed
   send can be retried with Enter; it reuses the nonce. A late response must not erase
   a draft edited while the request was running.

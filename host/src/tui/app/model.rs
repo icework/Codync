@@ -283,6 +283,11 @@ impl Bot {
         self.resting.iter().find(|r| r.agent == agent && r.until > now)
     }
 
+    /// A turn is running: working, or waiting on the user.
+    pub fn busy(&self) -> bool {
+        matches!(self.status, Status::Working | Status::NeedsInput)
+    }
+
     /// Whether the running turn talks in this chat.
     pub fn works_here(&self) -> bool {
         self.away().is_none()
@@ -375,6 +380,18 @@ impl Entry {
 
     pub fn is_final(&self) -> bool {
         self.kind == Kind::Agent && self.data["final"].as_bool().unwrap_or(false)
+    }
+
+    /// A step the working line unfolds: thinking, narration, a tool call or a plan, never the bot's bookkeeping
+    /// (nor a call an older host didn't flag either way).
+    pub fn is_working_step(&self) -> bool {
+        match self.kind {
+            Kind::Thought => !self.text().trim().is_empty(),
+            Kind::Agent => !self.is_final() && !crate::chat::group::is_pass(self.text()),
+            Kind::Tool => self.data["bookkeeping"] == false,
+            Kind::Plan => true,
+            _ => false,
+        }
     }
 
     /// A message the user can answer with a reply: theirs, or a final reply (the host checks too).

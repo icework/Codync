@@ -63,13 +63,25 @@ it has no pointer tooltip or link-opening action.
 ## While it works
 
 The working line under the last message shows the bot's activity; composing a `send_message`
-reads as **Typing…** (`activity()` in `agent/bot.rs`). The activity indicator shows an animated orb,
-a short status and elapsed time. It is not interactive and does not expand thinking text.
-Replies arrive as complete messages.
+reads as **Typing…** (`activity()` in `agent/bot/tool_entry.rs`). The activity indicator shows an
+animated orb, a short status and elapsed time, in a pill no wider than an agent bubble whose status
+truncates to one line. Replies arrive as complete messages.
+
+Once the running turn has steps, the pill ends in a chevron and a tap (click) unfolds them inside it:
+the turn's thinking text, narration (never a `(pass)`), tool calls (MCP tools included) and plan, in order, with each
+tool's output and diffs one more tap away. The pill widens to an agent bubble's width, the steps
+scroll inside it past 280 pt and follow new ones until the reader scrolls up, and each turn starts
+folded; the pill leaves with the turn. The host sets `bookkeeping` on every tool entry: `true` for
+the bot's own bookkeeping (a `send_message` call, a `memory` MCP call, or a call naming a file in a
+memory folder the bot sees), which the steps leave out, as the working line does. A host older than
+2.25.0 sets none, so its tool calls stay out of the steps too. A turn with no steps yet (some agents
+send no thinking text) shows no chevron.
 
 Full conversation remains available from the conversation menu. It contains narration, all
 thoughts, tools and previous turns, and follows new steps until the reader scrolls up.
-On the terminal, `t` opens Full conversation, and the working line retains the count of steps so far.
+On the terminal, `>` or a click on the working line unfolds the steps under it (their last
+14 lines), `t` opens Full conversation, and the working line keeps the count of steps so far;
+once the turn ends, its last message's `↳ N steps` line counts them the same way.
 
 ## Motion and scrolling
 

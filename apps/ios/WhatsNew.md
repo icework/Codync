@@ -17,6 +17,7 @@ a version without one gets a generic "Bug fixes and improvements" line. Delete o
 - 帳號選單裡的「電腦與設定」和它打開的頁面同名。
 - 新增聯結器失敗後再試一次，會使用你改好的金鑰。
 - 使用 Hermes Agent 或 Gemini CLI 的 Bot，記憶頁會說明它們自己的記憶由所有用同一個 agent 的 Bot 共用，Codync 沒辦法關掉。
+- Bot 工作中點一下狀態膠囊，就能在對話裡展開這一輪的思考、工具與 MCP 呼叫，太長時在膠囊內捲動。
 - 新增「Open Live Mode」捷徑，選擇 Bot 後直接開啟語音聊天。
 - 新增「Send Text to Bot」捷徑，可選擇 Bot 並傳送文字；預設在背景傳送，也可開啟「Open Chat」顯示對話。
 
@@ -29,6 +30,7 @@ a version without one gets a generic "Bug fixes and improvements" line. Delete o
 - The account sheet's Computers & settings row now has the same name as the page it opens.
 - Trying again after adding a connector failed uses the key you corrected.
 - For bots that run Hermes Agent or Gemini CLI, Memory explains that the agent's own memory is shared by every bot that runs it and Codync can't turn it off.
+- While a bot works, tap its status pill to unfold this turn's thinking, tool and MCP calls right in the chat; a long turn scrolls inside the pill.
 - Use Open Live Mode in Shortcuts to choose a bot and start voice chat.
 - Use Send Text to Bot to choose a bot and send text in the background by default, or enable Open Chat to show the conversation.
 

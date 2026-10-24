@@ -212,21 +212,3 @@
 .settings-appear {
   animation: fade-in var(--layout) both;
 }
-
-/* Show/hide: fade with a short drop from the top (`.opacity.combined(with: .move(edge: .top))`). */
-.settings-reveal {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: grid-template-rows var(--layout), opacity var(--layout), transform var(--layout);
-}
-.settings-reveal.shown {
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transform: none;
-}
-.settings-reveal > div {
-  min-height: 0;
-  overflow: hidden;
-}

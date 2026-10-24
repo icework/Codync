@@ -1,11 +1,10 @@
 import { BotAvatar } from '../../components/Avatar'
-import { CardSection, IconButton } from '../../components/Controls'
+import { CardSection, IconButton, Reveal } from '../../components/Controls'
 import { VStack } from '../../components/Stack'
 import { Text } from '../../components/Text'
 import { useModels } from '../../lib/observable'
 import { refKey } from '../../store/app-model'
 import { useApp } from '../../store/context'
-import { Reveal } from './parts'
 
 /** Bots hidden from the sidebar on every computer, each with Unhide (the iPhone's Hidden bots). */
 export function HiddenBotsSection() {

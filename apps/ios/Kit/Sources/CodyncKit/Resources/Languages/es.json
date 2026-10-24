@@ -965,6 +965,8 @@
   "Session timeline": "Cronología de la sesión",
   "Set by bot": "Definido por el bot",
   "Show what it did": "Mostrar lo que hizo",
+  "Show steps": "Mostrar pasos",
+  "Hide steps": "Ocultar pasos",
   "Sign in on the page that opened. This updates by itself when you're done.": "Inicia sesión en la página abierta. Esto se actualiza automáticamente al terminar.",
   "Sign in to see the other computers in your account.": "Inicia sesión para ver las demás computadoras de tu cuenta.",
   "Sign-in link copied: open it on this computer, then ^r refreshes": "Enlace de inicio de sesión copiado: ábrelo en esta computadora y luego ^r actualiza",

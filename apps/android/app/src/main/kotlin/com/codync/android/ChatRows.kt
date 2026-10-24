@@ -2,9 +2,17 @@ package com.codync.android
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,13 +30,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -35,6 +47,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -361,18 +374,48 @@ internal val Entry.botReactions: Map<String, List<String>> get() =
     }
 }
 
-/** The bot's current activity and elapsed time. */
-@Composable internal fun WorkingIndicator(bot: Bot) {
+/** The bot's current activity and elapsed time; once the turn has steps, a tap unfolds them. */
+@Composable internal fun WorkingIndicator(bot: Bot, steps: List<Entry>) {
     val needs = bot.status == "needsInput"
+    // Each turn starts folded.
+    var expanded by remember(bot.startedAt) { mutableStateOf(false) }
+    val open = expanded && steps.isNotEmpty()
+    val turn by animateFloatAsState(if (open) 90f else 0f, Motion.layout(), label = "Chevron")
+    val action = tr(if (open) "Hide steps" else "Show steps")
+    val state = tr(if (open) "Expanded" else "Collapsed")
+    val toggle = if (steps.isEmpty()) Modifier else Modifier.clickable(role = Role.Button, onClickLabel = action) { expanded = !expanded }
+        .semantics { stateDescription = state }
     Column(Modifier.fillMaxWidth().padding(top = 6.dp, end = 40.dp)) {
-        Row(Modifier.clip(RoundedRectangle(18.dp)).background(Palette.bubbleAgent)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThinkingOrb(if (needs) ThinkingOrbState.Listening else ThinkingOrbState.Working, 16.dp, if (needs) Palette.warning else Palette.secondary)
-            Text(tr(bot.activity.ifEmpty { "Working…" }), Modifier.weight(1f, fill = false), style = Type.subheadline,
-                color = if (needs) Palette.warning else Palette.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            bot.startedAt?.let { Elapsed(it) }
+        Column(Modifier.then(if (open) Modifier.fillMaxWidth() else Modifier).animateContentSize(Motion.layoutSize)
+            .clip(RoundedRectangle(18.dp)).background(Palette.bubbleAgent).padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(Modifier.then(if (open) Modifier.fillMaxWidth() else Modifier).then(toggle),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThinkingOrb(if (needs) ThinkingOrbState.Listening else ThinkingOrbState.Working, 16.dp, if (needs) Palette.warning else Palette.secondary)
+                Text(tr(bot.activity.ifEmpty { "Working…" }), Modifier.weight(1f, fill = open), style = Type.subheadline,
+                    color = if (needs) Palette.warning else Palette.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                bot.startedAt?.let { Elapsed(it) }
+                if (steps.isNotEmpty()) Symbol("chevron.right", Modifier.rotate(turn), size = 13.dp, tint = Palette.tertiary)
+            }
+            AnimatedVisibility(open, enter = fadeIn(Motion.fade()) + expandVertically(Motion.layoutSize),
+                exit = fadeOut(Motion.fade()) + shrinkVertically(Motion.layoutSize)) { WorkingSteps(steps) }
         }
+    }
+}
+
+/** The turn's thinking, narration, tool calls and plan: hugs them, scrolls past 280 dp, and follows new steps until
+ *  the reader scrolls up. */
+@Composable private fun WorkingSteps(steps: List<Entry>) {
+    val scroll = rememberScrollState()
+    var follow by remember { mutableStateOf(true) }
+    LaunchedEffect(scroll.isScrollInProgress) { if (!scroll.isScrollInProgress) follow = !scroll.canScrollForward }
+    // Follows new steps once they're laid out, not a row the reader unfolds (that grows the box too).
+    LaunchedEffect(steps) {
+        if (!follow) return@LaunchedEffect
+        withFrameNanos {}
+        scroll.scrollTo(scroll.maxValue)
+    }
+    Column(Modifier.padding(top = 12.dp).heightIn(max = 280.dp).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (entry in steps) key(entry.id) { TraceRow(entry, unfolded = true) }
     }
 }
 

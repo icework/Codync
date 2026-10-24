@@ -965,6 +965,8 @@
   "Session timeline": "会话时间线",
   "Set by bot": "由 Bot 设置",
   "Show what it did": "显示它做了什么",
+  "Show steps": "显示步骤",
+  "Hide steps": "隐藏步骤",
   "Sign in on the page that opened. This updates by itself when you're done.": "在打开的页面上登录。完成后这里会自己更新。",
   "Sign in to see the other computers in your account.": "登录后才能看到账户里的其他电脑。",
   "Sign-in link copied: open it on this computer, then ^r refreshes": "登录链接已复制：在这台电脑上打开，然后按 ^r 刷新",

@@ -24,6 +24,9 @@ public struct EntryData: Codable, Hashable, Sendable {
     public var clientNonce: String?
     public var title: String?
     public var toolKind: String?
+    /// tool: whether it's the bot's own bookkeeping (composing its message, keeping its memory), left out of the
+    /// working steps; `nil` from a host older than 2.25.0.
+    public var bookkeeping: Bool?
     public var output: String?
     public var diffs: [FileDiff]?
     public var locations: [Location]?

@@ -16,6 +16,7 @@ else a generic "Bug fixes and improvements" line. Delete old sections.
 - Bot 之間交辦工作不必等待，對方的回覆會回到發問的 Bot，再由它回覆你。
 - 帳號選單裡的「電腦與設定」和它打開的頁面同名。
 - 新增聯結器失敗後再試一次，會使用你改好的金鑰。
+- Bot 工作中點一下狀態膠囊，就能在對話裡展開這一輪的思考、工具與 MCP 呼叫，太長時在膠囊內捲動。
 
 ### en-US
 - Bots can make artifacts: reports, trackers and dashboards you come back to show as a card in the chat. Open one full screen and message the bot below it to change it; it updates in place.
@@ -24,3 +25,4 @@ else a generic "Bug fixes and improvements" line. Delete old sections.
 - Bots hand work to each other without waiting; the answer comes back to the bot that asked, which then replies to you.
 - The account sheet's Computers & settings row now has the same name as the page it opens.
 - Trying again after adding a connector failed uses the key you corrected.
+- While a bot works, tap its status pill to unfold this turn's thinking, tool and MCP calls right in the chat; a long turn scrolls inside the pill.

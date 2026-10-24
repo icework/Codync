@@ -965,6 +965,8 @@
   "Session timeline": "Sitzungszeitleiste",
   "Set by bot": "Vom Bot festgelegt",
   "Show what it did": "Seine Aktionen anzeigen",
+  "Show steps": "Schritte anzeigen",
+  "Hide steps": "Schritte ausblenden",
   "Sign in on the page that opened. This updates by itself when you're done.": "Melde dich auf der geöffneten Seite an. Danach wird diese Ansicht automatisch aktualisiert.",
   "Sign in to see the other computers in your account.": "Melde dich an, um die anderen Computer in deinem Konto zu sehen.",
   "Sign-in link copied: open it on this computer, then ^r refreshes": "Anmeldelink kopiert: auf diesem Computer öffnen, dann mit ^r aktualisieren",

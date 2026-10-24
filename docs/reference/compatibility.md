@@ -130,7 +130,7 @@ the host's `minApp`.
 
 So a breaking change can't land by accident: it either keeps the old field or raises the
 floor. `null` fields match any type. Not covered: subtrees that depend on the machine rather
-than the code (`backends`, `screen`, `urls`, `usage`), fields the sample turn doesn't produce
+than the code (`backends`, `screen`, `urls`, `usage`, including asynchronous usage events), fields the sample turn doesn't produce
 (replies, group chats, routines and other method responses), and what the host
 accepts in requests. Changes there still follow the rule by review.
 

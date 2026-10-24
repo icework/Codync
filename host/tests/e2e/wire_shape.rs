@@ -44,11 +44,27 @@ fn shape(v: &Value, path: &str, out: &mut std::collections::BTreeMap<String, Str
 /// The shape of a stream event, keyed by its type (and an entry's kind: their data differ).
 fn event_shape(ev: &Value, out: &mut std::collections::BTreeMap<String, String>) {
     let ty = ev["type"].as_str().unwrap_or("?");
+    // Local usage polling can broadcast during catch-up; its presence is as machine-dependent as hello.usage.
+    if ty == "usage" {
+        return;
+    }
     let key = match ev["entry"]["kind"].as_str() {
         Some(kind) if ty == "entry" => format!("event:entry({kind})"),
         _ => format!("event:{ty}"),
     };
     shape(ev, &key, out);
+}
+
+#[test]
+fn local_usage_polling_does_not_change_the_wire_snapshot() {
+    let hello = json!({"type": "hello", "rev": 1, "usage": {"providers": []}});
+    let mut before = std::collections::BTreeMap::new();
+    event_shape(&hello, &mut before);
+    let mut after = before.clone();
+    event_shape(&json!({"type": "usage", "usage": {"providers": [{"id": "codex"}]}}), &mut after);
+    assert_eq!(after, before);
+    event_shape(&json!({"type": "entry", "entry": {"kind": "agent", "data": {"final": true}}}), &mut after);
+    assert_eq!(after.get("event:entry(agent).entry.data.final").map(String::as_str), Some("bool"));
 }
 
 /// What changed between the recorded and the current shape: (breaking, additions).

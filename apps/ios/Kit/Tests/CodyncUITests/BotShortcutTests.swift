@@ -147,7 +147,8 @@ private struct RefusingSendTransport: HostTransport {
     let suite = "BotShortcutTests.\(UUID().uuidString)"
     defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
     let remote = FakeRemote(.ready(.direct))
-    await remote.fail("send", times: 1)
+    // Every retry fails too: on a slow runner a retry 500 ms later would otherwise send before the cancel.
+    await remote.fail("send", times: 1_000)
     let store = shortcutStore(SharedStore.Context(accountID: nil, suite: suite), remote: remote)
     defer { store.retire() }
     store.setActive(true)

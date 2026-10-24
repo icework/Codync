@@ -20,6 +20,7 @@ struct CodyncApp: App {
     init() {
         // A tapped widget bot arrives as an intent, not a URL.
         OpenBotIntent.open = { AppStore.shared.open($0) }
+        BotShortcuts.updateAppShortcutParameters()
     }
 
     var body: some Scene {

@@ -79,6 +79,9 @@ public final class BotStore {
     /// The remote screen viewer (iPhone); `codync://screen` opens it.
     public var screenRequest: ScreenRequest?
 
+    /// A Shortcuts request, consumed by the matching conversation.
+    public internal(set) var voiceCallRequest: String?
+
     // Platform hooks (push registration, Live Activities, widgets).
     /// Each time the channel becomes ready.
     public var onConnected: (@MainActor (BotStore) -> Void)?

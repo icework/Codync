@@ -22,6 +22,7 @@ extension BotStore {
         client = nil
         selection = nil
         screenRequest = nil
+        voiceCallRequest = nil
     }
 
     public func setActive(_ active: Bool) {

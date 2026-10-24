@@ -1,61 +1,63 @@
-# iOS BOT 快捷指令交付与验证
+# iOS bot shortcuts: delivery and verification
 
-时间：2026-10-23 21:36 America/Los_Angeles。版本：2.25.0。
+Verified: 2026-10-23 21:36 America/Los_Angeles. Version: 2.25.0.
 
-## 结果
+This records the original two-action implementation. The later optional Open Chat/background-send behavior is covered by the [follow-up verification report](2026-10-23-2145-background-shortcut.md).
 
-- **Open Live Mode**：BOT 是可选择的输入。支持固定 BOT、快捷指令变量或每次询问；打开目标聊天并启动现有语音通话。
-- **Send Text to Bot**：BOT 与 Text 都是输入。复用现有发送、nonce 去重及离线邮箱，等待接收确认后才返回成功；保留原聊天草稿。
-- 两个动作都在 iOS 系统 Shortcuts 中可发现，并将 Codync 带到前台。无需输入 BOT ID 或拼接 URL。
-- 实体 ID 包含账号及电脑作用域。隐藏/删除 BOT、移除电脑、切换账号后的旧选择会被拒绝。
+## Result
 
-使用说明：[iOS Shortcuts](../features/ios-shortcuts.md)。
+- **Open Live Mode** accepts a selectable Bot input: a saved bot, shortcut variable or Ask Each Time. It opens the chosen conversation and starts the existing voice call.
+- **Send Text to Bot** accepts Bot and Text inputs. It reuses normal sending, nonce deduplication and the offline mailbox, waits for acceptance, and preserves the composer draft. In this original implementation it opened the conversation on each run.
+- Both actions are discoverable in iOS Shortcuts. No manual bot ID or URL construction is needed.
+- Saved entities carry account and computer scope. Hidden/deleted bots, removed computers and stale selections from another account are rejected.
 
-## 自动验证
+[User guide](../features/ios-shortcuts.md).
 
-- iOS Dev / DevDebug，iOS 27.0 Simulator：构建成功，正常模拟器签名。
-- CodyncKit-Package：227 项 Swift Testing 测试通过（CodyncUI 106、CodyncKit 121）。
-- 新增测试覆盖：账号隔离、隐藏 BOT、移除电脑、目标 BOT 延迟同步、全局 revision 高于 BOT revision、空输入、无效 BOT、电脑拒绝发送、取消重试、送达确认、离线邮箱接收、草稿保留、Live 请求一次消费及 store 退出。
-- App Intents 元数据包含两个动作；iOS、host、desktop 与 lockfile 的发布版本一致。
-- `git diff --check` 通过。
+## Automated validation
 
-## 实际应用验证
+- iOS Dev / DevDebug build passed for iOS 27.0 Simulator with normal simulator signing.
+- CodyncKit-Package: 227 Swift Testing tests passed (106 CodyncUI, 121 CodyncKit).
+- New coverage: account isolation, hidden bots, removed computers, delayed target-bot synchronization, global revision gaps, empty input, invalid bots, host refusal, canceled retries, delivery/mailbox acceptance, draft preservation, one-shot Live requests and store retirement.
+- Extracted App Intents metadata contains both actions. iOS, host, desktop and lockfile release versions agree.
+- `git diff --check` passed.
 
-通过 Xcode Device Hub 控制独立的 **Codync Shortcuts QA** 模拟器，连接本任务隔离的真实 Rust Host（19387 端口），未使用生产账号或复制生产设备凭据。Host 代码无行为修改，使用已有兼容的 2.24.0 开发二进制。
+## Actual-app validation
 
-| 平台/流程 | 结果 | 观察 |
+Xcode Device Hub controlled an independent **Codync Shortcuts QA** simulator paired to this task's isolated real Rust host on port 19387. Production accounts and device credentials were not copied. Host behavior was unchanged; testing reused the compatible existing 2.24.0 development binary.
+
+| Platform / flow | Result | Evidence |
 | --- | --- | --- |
-| iOS / Shortcuts 发现动作 | pass | 搜索 Codync 可见 Open Live Mode 与 Send Text to Bot。 |
-| iOS / BOT 参数选择 | pass | 列出测试 BOT 和电脑名称；可进入 Variables → Ask Each Time。 |
-| iOS / 冷启动发送文字 | pass | 先终止 Codync Dev，再从系统 Shortcuts 发送；出现 Message sent，Host 保存用户消息，真实 Codex BOT 回复 `shortcut ok`。 |
-| iOS / Live 每次询问 BOT | pass | 运行时显示 BOT 选择，选中后直接打开正确聊天；首次走正常麦克风和语音识别权限，进入 Listening。 |
-| iOS / 已有聊天弹层 | pass | 先打开 Full conversation，再运行 Live；弹层关闭，显示 Listening 与通话控件。 |
-| iOS / 结束通话 | pass | 两次测试均通过 End call 结束，聊天出现 Voice chat 时长。 |
-| iOS / 离线邮箱 | unit-tested | 隔离 Host 关闭云连接，未进行真实 relay 邮箱 E2E；FakeRemote 回归验证接收后才返回 queued。 |
-| iOS / 远程屏幕覆盖层清理 | static-reviewed | 已清除所有 store 的 screenRequest；本轮未启动远程屏幕辅助进程进行该分支 E2E。 |
-| 实体 iPhone / Siri、锁屏、语音往返 | not_run | 本轮在模拟器验证系统 Shortcuts 和 Listening；未验证实体设备的 Siri、锁屏或实际语音识别往返。 |
-| macOS/Linux/Windows/Android/TUI | not_applicable | 本次新增 iOS App Intents 入口；检查了其他客户端的对应聊天/通话实现，功能逻辑和界面无需变化，仅统一发布版本。 |
+| iOS / discover actions | pass | Searching Codync showed Open Live Mode and Send Text to Bot. |
+| iOS / Bot input | pass | Picker listed the test bot and computer name; Variables exposed Ask Each Time. |
+| iOS / cold-start text send | pass | Terminated Codync Dev, then ran the system shortcut. It showed Message sent; the host stored the user message and the real Codex bot replied `shortcut ok`. |
+| iOS / Live with Ask Each Time | pass | Selected a bot at runtime, reached its conversation, completed normal first-use microphone/speech permissions and reached Listening. |
+| iOS / existing chat sheet | pass | Opened Full conversation before running Live; the sheet closed and call controls appeared with Listening. |
+| iOS / end call | pass | Both calls ended using End call and produced Voice chat duration notices. |
+| iOS / offline mailbox | unit-tested | The isolated host had cloud disabled, so real-relay E2E was not run. FakeRemote verified queued is returned only after mailbox acceptance. |
+| iOS / remote-screen overlay cleanup | static-reviewed | All stores' screenRequest values are cleared. No remote-screen helper was started to test that branch end to end. |
+| Physical iPhone / Siri, lock screen, spoken round trip | not_run | Simulator verification covered Shortcuts and Listening, not physical-device Siri/lock-screen or spoken audio. |
+| macOS, Linux, Windows, Android, TUI | not_applicable | This adds an iOS App Intents entry point. Corresponding chat/call implementations were inspected; shared behavior and layouts were unchanged. Only release metadata changed elsewhere. |
 
-首次文字试运行因测试 Host 仅绑定 loopback、而公布了 LAN/Tailscale 地址而失败；修正隔离 Host 的监听配置后，最终构建的冷启动发送及 Live 流程均通过。此问题未要求产品代码修改。
+The initial text trial failed because the test host was bound only to loopback while advertising LAN/Tailscale routes. After correcting that isolated host setup, final-build cold-start sending and Live passed. No product-code change was needed for that setup issue.
 
-## 审查与修正
+## Review and fixes
 
-按 after-change 执行 correctness、completeness、refactor 三项并行只读审查，随后由独立 verifier 核对发现。修复了三个确认的问题：冷启动过早判断 BOT 不存在；已有远程屏幕/聊天弹层遮住 Live；取消快捷指令未传播至发送重试。
+The after-change workflow used parallel read-only correctness, completeness and refactor reviews, followed by an independent verifier. Three confirmed issues were fixed: checking for a bot before cold-start synchronization, existing screen/chat presentations obscuring Live, and cancellation not reaching delivery retries.
 
-复核还发现 Host 的全局 revision 可能包含不出现在 BOT/entry 流中的记忆更新；最终只在目标 BOT 尚未到达时等待，避免合法 BOT 因全局 revision 无法追平而超时。对应回归测试通过。最终只读复核无新增实质问题。
+Verification also identified that the host's global revision can include memory writes absent from the bot/entry stream. The final implementation waits only while the target bot is missing, avoiding a false timeout when that bot has already arrived. Its regression passed; final review found no further substantive issue.
 
-未做无关重构。保持现有 Host API 与兼容性下限，发布版本从 v2.24.0 升为 2.25.0，并补齐繁中及英文 What's New。
+No unrelated refactor was applied. Host APIs and compatibility floors are unchanged. Release metadata was raised from v2.24.0 to 2.25.0 and Traditional Chinese/English What's New entries were added.
 
-## 界面证据
+## Screenshots
 
-![文字收发](ios-shortcuts-2026-10-23/text-sent.png)
+![Text delivery and reply](ios-shortcuts-2026-10-23/text-sent.png)
 
-![每次询问 BOT](ios-shortcuts-2026-10-23/bot-input.png)
+![Runtime Bot input](ios-shortcuts-2026-10-23/bot-input.png)
 
 ![Live Listening](ios-shortcuts-2026-10-23/live-listening.png)
 
-![Live 关闭原有弹层](ios-shortcuts-2026-10-23/live-dismisses-sheet.png)
+![Live dismisses the previous sheet](ios-shortcuts-2026-10-23/live-dismisses-sheet.png)
 
-## 交付限制
+## Handoff limitation
 
-`git pull --rebase --autostash origin dev` 已完成；原分支已有提交没有混入本功能工作区。`git push origin dev` 返回 403（当前 GitHub 账号 icework 对 leepokai/Codync 无推送权限），因此无法直接完成上游 dev 的合并发布。本功能保留独立分支，供上游 PR 审阅。
+`git pull --rebase --autostash origin dev` completed. Existing commits on the original checkout's branch were not included in this isolated feature branch. `git push origin dev` returned HTTP 403 because the active GitHub account, icework, cannot push to leepokai/Codync. The feature was pushed to its fork branch and submitted as upstream PR #211; it was not merged or released.

@@ -82,6 +82,34 @@ async fn health_names_this_binary() {
     assert_eq!(health["binaryPath"], exe.strip_prefix(r"\\?\").unwrap_or(exe));
 }
 
+#[tokio::test]
+async fn readiness_needs_this_homes_token() {
+    use axum::http::{HeaderMap, StatusCode};
+    use axum::{Router, routing::get};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = Router::new().route(
+        "/events",
+        get(|headers: HeaderMap| async move {
+            if headers.get("authorization").and_then(|v| v.to_str().ok()) == Some("Bearer listener-token") {
+                StatusCode::OK
+            } else {
+                StatusCode::UNAUTHORIZED
+            }
+        }),
+    );
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let home = std::env::temp_dir().join(format!("codync-readiness-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&home).unwrap();
+    assert!(common::ready(&base, &home).await.is_err(), "a foreign listener does not make a new home ready");
+    std::fs::write(home.join("token"), "different-token").unwrap();
+    assert!(common::ready(&base, &home).await.is_err(), "an existing token from a restart must match the listener");
+    std::fs::write(home.join("token"), "listener-token").unwrap();
+    assert!(common::ready(&base, &home).await.is_ok());
+    server.abort();
+    std::fs::remove_dir_all(home).unwrap();
+}
+
 // SIGTERM is Unix only; Windows stops the host by ending its process.
 #[cfg(unix)]
 #[tokio::test]

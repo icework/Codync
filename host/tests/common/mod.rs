@@ -8,8 +8,7 @@ use std::time::{Duration, Instant};
 
 /// Runs `codync-host serve` for `home` until it answers: the process and its base URL. A port
 /// picked here is only free for a moment; when something else takes it before the host binds, the
-/// host exits and this starts it again on another one. Readiness must authenticate with this
-/// home's token: another test's public health response is not our child becoming ready.
+/// host exits and this starts it again on another one.
 pub async fn serve(home: &Path) -> (Child, String) {
     let deadline = Instant::now() + Duration::from_secs(30);
     let _ = std::fs::create_dir_all(home);
@@ -38,16 +37,16 @@ pub async fn serve(home: &Path) -> (Child, String) {
     }
 }
 
-/// Why a test host didn't answer: the last health check's error and the end of the host's log.
+/// Why a test host didn't answer: the last readiness check's error and the end of the host's log.
 fn not_started(log: &Path, last: &str) -> String {
     let text = std::fs::read_to_string(log).unwrap_or_default();
     let lines: Vec<&str> = text.lines().collect();
     let tail = lines[lines.len().saturating_sub(30)..].join("\n");
-    format!("host didn't start; last health check: {last}\n--- host log ---\n{tail}")
+    format!("host didn't start; last readiness check: {last}\n--- host log ---\n{tail}")
 }
 
 /// Whether `base` is this home's host: on a reused port another test's host answers `/health` too.
-async fn ready(base: &str, home: &Path) -> Result<(), String> {
+pub async fn ready(base: &str, home: &Path) -> Result<(), String> {
     let token = std::fs::read_to_string(home.join("token")).map_err(|e| format!("no token yet: {e}"))?;
     let res = reqwest::Client::new()
         .get(format!("{base}/events?since=0&client=test"))
@@ -57,34 +56,6 @@ async fn ready(base: &str, home: &Path) -> Result<(), String> {
         .await
         .map_err(|e| format!("{e:?}"))?;
     res.status().is_success().then_some(()).ok_or_else(|| format!("status {}", res.status()))
-}
-
-#[tokio::test]
-async fn readiness_rejects_another_hosts_health_response() {
-    use axum::http::{HeaderMap, StatusCode};
-    use axum::{Router, routing::get};
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    let router = Router::new().route("/health", get(|| async { StatusCode::OK })).route(
-        "/events",
-        get(|headers: HeaderMap| async move {
-            if headers.get("authorization").and_then(|v| v.to_str().ok()) == Some("Bearer listener-token") {
-                StatusCode::OK
-            } else {
-                StatusCode::UNAUTHORIZED
-            }
-        }),
-    );
-    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    let home = std::env::temp_dir().join(format!("codync-readiness-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&home).unwrap();
-    assert!(ready(&base, &home).await.is_err(), "a foreign listener does not make a new home ready");
-    std::fs::write(home.join("token"), "different-token").unwrap();
-    assert!(ready(&base, &home).await.is_err(), "an existing token from a restart must match the listener");
-    std::fs::write(home.join("token"), "listener-token").unwrap();
-    assert!(ready(&base, &home).await.is_ok());
-    server.abort();
-    std::fs::remove_dir_all(home).unwrap();
 }
 
 /// Stops a test host the way launchd does (SIGTERM), so it shuts down its own
@@ -157,6 +128,18 @@ pub async fn snapshot(base: &str, token: &str) -> serde_json::Value {
         }
     }
     serde_json::json!({"rev": rev, "bots": bots, "entries": entries})
+}
+
+/// How many routine runs still hold a session in `home`'s store: the host keeps each as a
+/// `lane.session.<bot>@<bot>/routine-<run>` row (`store::model::run_session_key`) and forgets
+/// it when the run ends.
+#[allow(dead_code, reason = "only the routine tests wait for runs")]
+pub fn routine_sessions(home: &Path) -> i64 {
+    rusqlite::Connection::open(home.join("codync.db"))
+        .and_then(|db| {
+            db.query_row("SELECT COUNT(*) FROM kv WHERE k GLOB 'lane.session.*/routine-*'", [], |r| r.get(0))
+        })
+        .expect("read the host's store")
 }
 
 /// Bot `id` in a [`snapshot`] (which also holds the lead bot every host makes).

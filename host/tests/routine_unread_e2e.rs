@@ -9,23 +9,19 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 async fn unread(host: &Host, bot: &str) -> Value {
-    host.snapshot().await["bots"].as_array().unwrap().iter().find(|b| b["id"] == bot).unwrap()["unread"].clone()
+    common::bot(&host.snapshot().await, bot)["unread"].clone()
 }
 
 async fn wait_for_run_cleanup(host: &Host, bot: &str, routine: &str) {
-    let db = rusqlite::Connection::open(host.home.join("codync.db")).unwrap();
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             let listing = host.call("routines", json!({"botId": bot})).await;
-            let sessions: i64 = db
-                .query_row("SELECT COUNT(*) FROM kv WHERE k GLOB 'lane.session.*/routine-*'", [], |r| r.get(0))
-                .unwrap();
             if listing["runs"]
                 .as_array()
                 .unwrap()
                 .iter()
                 .any(|r| r["routineId"] == routine && r["status"] == "succeeded")
-                && sessions == 0
+                && common::routine_sessions(&host.home) == 0
             {
                 return;
             }
@@ -61,24 +57,8 @@ async fn a_routine_result_and_a_followup_each_become_read_without_hidden_unreads
     host.call("markRead", json!({"botId": bot})).await;
     assert_eq!(unread(&host, &bot).await, 0);
 
-    host.call("send", json!({"botId": bot, "text": "FOLLOWUP", "clientNonce": uuid::Uuid::new_v4().to_string()})).await;
-    tokio::time::timeout(Duration::from_secs(30), async {
-        loop {
-            let history = host.call("history", json!({"botId": bot})).await;
-            // Streaming the text does not make it unread until the host finalizes the reply.
-            if history["entries"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|e| e["kind"] == "agent" && e["data"]["text"] == "reply: FOLLOWUP" && e["data"]["final"] == true)
-            {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    .expect("follow-up must be finalized before checking its unread count");
+    host.reply(&bot, "FOLLOWUP").await;
+    // Streaming the text does not make it unread until the host finalizes the reply.
     assert_eq!(unread(&host, &bot).await, 1);
     host.call("markRead", json!({"botId": bot})).await;
     assert_eq!(unread(&host, &bot).await, 0);

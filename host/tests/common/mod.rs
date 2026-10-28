@@ -12,6 +12,9 @@ use std::time::{Duration, Instant};
 /// home's token: another test's public health response is not our child becoming ready.
 pub async fn serve(home: &Path) -> (Child, String) {
     let deadline = Instant::now() + Duration::from_secs(30);
+    let _ = std::fs::create_dir_all(home);
+    let log = home.join("host-stderr.log");
+    let mut last = String::new();
     loop {
         let port = std::net::TcpListener::bind("127.0.0.1:0").expect("free port").local_addr().expect("port").port();
         let base = format!("http://127.0.0.1:{port}");
@@ -20,29 +23,40 @@ pub async fn serve(home: &Path) -> (Child, String) {
             .env("CODYNC_HOME", home)
             .env("CODYNC_CLOUD", "off")
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(std::fs::File::create(&log).map_or_else(|_| Stdio::null(), Stdio::from))
             .spawn()
             .expect("start the host");
         while child.try_wait().expect("host state").is_none() {
-            if ready(&base, home).await {
-                return (child, base);
+            match ready(&base, home).await {
+                Ok(()) => return (child, base),
+                Err(e) => last = e,
             }
-            assert!(Instant::now() < deadline, "host didn't start");
+            assert!(Instant::now() < deadline, "{}", not_started(&log, &last));
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        assert!(Instant::now() < deadline, "host didn't start");
+        assert!(Instant::now() < deadline, "{}", not_started(&log, &last));
     }
 }
 
-async fn ready(base: &str, home: &Path) -> bool {
-    let Ok(token) = std::fs::read_to_string(home.join("token")) else { return false };
-    reqwest::Client::new()
+/// Why a test host didn't answer: the last health check's error and the end of the host's log.
+fn not_started(log: &Path, last: &str) -> String {
+    let text = std::fs::read_to_string(log).unwrap_or_default();
+    let lines: Vec<&str> = text.lines().collect();
+    let tail = lines[lines.len().saturating_sub(30)..].join("\n");
+    format!("host didn't start; last health check: {last}\n--- host log ---\n{tail}")
+}
+
+/// Whether `base` is this home's host: on a reused port another test's host answers `/health` too.
+async fn ready(base: &str, home: &Path) -> Result<(), String> {
+    let token = std::fs::read_to_string(home.join("token")).map_err(|e| format!("no token yet: {e}"))?;
+    let res = reqwest::Client::new()
         .get(format!("{base}/events?since=0&client=test"))
         .bearer_auth(token.trim())
         .timeout(Duration::from_secs(1))
         .send()
         .await
-        .is_ok_and(|response| response.status().is_success())
+        .map_err(|e| format!("{e:?}"))?;
+    res.status().is_success().then_some(()).ok_or_else(|| format!("status {}", res.status()))
 }
 
 #[tokio::test]
@@ -64,11 +78,11 @@ async fn readiness_rejects_another_hosts_health_response() {
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     let home = std::env::temp_dir().join(format!("codync-readiness-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&home).unwrap();
-    assert!(!ready(&base, &home).await, "a foreign listener does not make a new home ready");
+    assert!(ready(&base, &home).await.is_err(), "a foreign listener does not make a new home ready");
     std::fs::write(home.join("token"), "different-token").unwrap();
-    assert!(!ready(&base, &home).await, "an existing token from a restart must match the listener");
+    assert!(ready(&base, &home).await.is_err(), "an existing token from a restart must match the listener");
     std::fs::write(home.join("token"), "listener-token").unwrap();
-    assert!(ready(&base, &home).await);
+    assert!(ready(&base, &home).await.is_ok());
     server.abort();
     std::fs::remove_dir_all(home).unwrap();
 }
@@ -143,4 +157,10 @@ pub async fn snapshot(base: &str, token: &str) -> serde_json::Value {
         }
     }
     serde_json::json!({"rev": rev, "bots": bots, "entries": entries})
+}
+
+/// Bot `id` in a [`snapshot`] (which also holds the lead bot every host makes).
+#[allow(dead_code, reason = "not every test binary looks bots up")]
+pub fn bot<'a>(sync: &'a serde_json::Value, id: &str) -> &'a serde_json::Value {
+    sync["bots"].as_array().and_then(|bots| bots.iter().find(|b| b["id"] == id)).expect("the bot is in the snapshot")
 }

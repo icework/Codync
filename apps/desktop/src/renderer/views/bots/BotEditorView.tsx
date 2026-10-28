@@ -7,7 +7,7 @@ import { CharacterAvatar } from '../../components/Avatar'
 import { CardSection, ChoicePicker, DropdownMenu, IconButton, Pill, SearchField, Spinner, ValueRow } from '../../components/Controls'
 import { Icon } from '../../components/Icon'
 import { ModalHeader, Sheet, SheetPage, useDismiss } from '../../components/Overlay'
-import { HStack, IconSlot, VStack } from '../../components/Stack'
+import { HStack, IconSlot } from '../../components/Stack'
 import { Text } from '../../components/Text'
 import { useStore } from '../../store/context'
 import { useAgentModels } from './agent-models'
@@ -17,6 +17,7 @@ import { errorText, isValid, lastPathComponent, normalized, useFollowSaved, useP
 import { FormSheet } from '../marketplace/pieces'
 import { SkillSheet, type SkillRef } from '../marketplace/SkillSheet'
 import { AnchoredPanel, AutoTextArea, AvatarPicker, Field, SwitchRow } from './parts'
+import { NetworkSwitches } from './NetworkSwitches'
 import './bots.css'
 import { useTr } from '../../lib/use-language'
 
@@ -137,42 +138,18 @@ function BotSettingsForm({ draft, onChange, error, plugins, part = 'all' }: {
       <AutoTextArea className="field-box" value={draft.description} placeholder="e.g. Reviews PRs. Never pushes without asking." minRows={3} maxRows={8} onChange={(v) => set('description', v)} />
     </Field>
   )
-  const model = [
-    <AgentModelPicker key="model" backend={draft.backend} models={models} selection={draft.model} onChange={setModel} options={draft.modelOptions ?? {}} onOptionsChange={setModelOptions} />,
-    (draft.backend !== 'custom' && models.catalog?.fastMode) || draft.fastMode || (saved?.backend === draft.backend && fastModeShown(saved)) ? (
-      // Shown while the agent offers it (its model list, or the bot's own sessions), or while it's on.
-      <div key="fast" className="fade-in">
-        <SwitchRow
-          title="Fast mode"
-          detail={(saved && fastModeRefusal(saved)) ?? 'Faster replies for more usage, on models that offer it.'}
-          on={draft.fastMode ?? false}
-          onChange={(on) => set('fastMode', on)}
-        />
-      </div>
-    ) : null,
-  ]
-
   const ownRest = saved ? restOf(saved, draft.backend, Date.now()) : null
   const agent = (
-    <VStack key="agent" gap={8}>
-      <ValueRow label="Agent" detail={ownRest ? restLine(ownRest, Date.now()) : null}>
-        <ChoicePicker
-          selection={draft.backend}
-          options={[...backends.map(agentChoice), { id: 'custom', label: 'Custom command', leading: <AgentIcon registry="custom" size={14} /> }]}
-          onChange={(id) => onChange((d) => withBackend(d, id))}
-        />
-      </ValueRow>
-      {backend && !backend.available ? <Text size="caption" tone="attention">{backend.installHint}</Text> : null}
-      {draft.backend === 'custom' ? (
-        <input
-          className="field-box fade-in bot-command"
-          value={draft.command ?? ''}
-          placeholder="ACP command, e.g. my-agent --acp"
-          spellCheck={false}
-          onChange={(e) => set('command', e.target.value || null)}
-        />
-      ) : null}
-    </VStack>
+    <AgentModelPicker key="agent" backend={draft.backend} models={models} selection={draft.model}
+      onChange={setModel} options={draft.modelOptions ?? {}} onOptionsChange={setModelOptions}
+      agents={[...backends.map(agentChoice), { id: 'custom', label: 'Custom command', leading: <AgentIcon registry="custom" size={14} /> }]}
+      onAgentChange={(id) => onChange((d) => withBackend(d, id))} fast={draft.fastMode ?? false}
+      fastControl={((draft.backend !== 'custom' && models.catalog?.fastMode) || draft.fastMode || (saved?.backend === draft.backend && fastModeShown(saved))) ?
+        <SwitchRow title="Fast mode" detail={saved ? fastModeRefusal(saved) : null} on={draft.fastMode ?? false} onChange={(on) => set('fastMode', on)} /> : null}>
+      {ownRest && <Text size="caption" tone="secondary">{restLine(ownRest, Date.now())}</Text>}
+      {backend && !backend.available && <Text size="caption" tone="attention">{backend.installHint}</Text>}
+      {draft.backend === 'custom' && <input className="field-box bot-command" value={draft.command ?? ''} placeholder="ACP command, e.g. my-agent --acp" spellCheck={false} onChange={(e) => set('command', e.target.value || null)} />}
+    </AgentModelPicker>
   )
   // While the bot runs on a fallback, the Agent card starts with it.
   const step = saved?.agentStep ? <AgentStepBanner key="step" bot={saved} /> : null
@@ -196,7 +173,6 @@ function BotSettingsForm({ draft, onChange, error, plugins, part = 'all' }: {
           <CardSection title="Agent">
             {step}
             {agent}
-            {model}
             {fallbacks}
           </CardSection>
           {error ? <Text size="footnote" tone="danger" className="fade-in">{error}</Text> : null}
@@ -234,7 +210,6 @@ function BotSettingsForm({ draft, onChange, error, plugins, part = 'all' }: {
             <Text truncate>{store.hostName}</Text>
           </ValueRow>
           {part === 'all' ? agent : null}
-          {part === 'all' ? model : null}
           {part === 'all' ? fallbacks : null}
           <ValueRow
             label="Workspace"
@@ -303,6 +278,7 @@ function BotSettingsForm({ draft, onChange, error, plugins, part = 'all' }: {
               onChange={(on) => set('manageTeam', on)}
             />
           ) : null}
+          <NetworkSwitches draft={draft} set={set} />
         </CardSection>
 
         <PluginToggles

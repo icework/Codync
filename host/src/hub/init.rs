@@ -21,6 +21,7 @@ impl Hub {
             network: crate::network::Network::default(),
             waiting: crate::chat::team::remote::Waiting::default(),
             assistant: crate::chat::team::assistant::Replies::default(),
+            live_calls: crate::chat::calls::live::Calls::default(),
             store,
             host_id,
             identity,

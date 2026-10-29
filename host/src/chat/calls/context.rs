@@ -92,12 +92,23 @@ pub async fn instructions(
     language: Option<&str>,
     so_far: &[super::CallLine],
 ) -> String {
+    with_rules(hub, cfg, provider, language, so_far, rules(hub, cfg)).await
+}
+
+pub(super) async fn with_rules(
+    hub: &Arc<Hub>,
+    cfg: &BotConfig,
+    provider: Option<Provider>,
+    language: Option<&str>,
+    so_far: &[super::CallLine],
+    role: String,
+) -> String {
     let tenths = if provider == Some(Provider::OpenAi) { OPENAI_TENTHS } else { 10 };
     let cap = |n: usize| n * tenths / 10;
     let project = super::project::now(&cfg.cwd).await;
     let (h, c, l) = (hub.clone(), cfg.clone(), language.map(str::to_owned));
     let sections = tokio::task::spawn_blocking(move || background(&h, &c, l.as_deref())).await.unwrap_or_default();
-    let mut out = vec![rules(hub, cfg)];
+    let mut out = vec![role];
     let caps = &CAPS;
     let named = [
         ("Now", "this computer's clock and the user's phone", sections.now, caps.now),

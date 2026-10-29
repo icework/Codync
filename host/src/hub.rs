@@ -83,6 +83,7 @@ pub struct Hub {
     pub waiting: crate::chat::team::remote::Waiting,
     /// The user's cloud assistant: its requests to this computer's bots and their replies.
     pub assistant: crate::chat::team::assistant::Replies,
+    pub live_calls: crate::chat::calls::live::Calls,
     pub store: Store,
     pub host_id: String,
     pub identity: Identity,

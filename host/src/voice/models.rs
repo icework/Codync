@@ -1,31 +1,23 @@
 //! Provider model discovery and stable defaults, shared by all clients.
 
-use super::{Defaults, Provider, defaults_key, key, send};
+use super::{Defaults, Provider, defaults_key, key, live, send};
 use crate::store::Store;
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use serde_json::{Value, json};
 
 /// Models the key can use, from the provider's own list: realtime (conversation),
 /// transcribe (speech to text) and speech (text to speech).
 pub async fn models(store: &Store, p: Provider) -> Result<Value> {
+    models_for_client(store, p, false).await
+}
+
+/// Live is opt-in: older clients never receive a model they cannot connect to.
+pub async fn models_for_client(store: &Store, p: Provider, supports_live: bool) -> Result<Value> {
     let key = key(store, p)?;
     let entries: Vec<Model> = match p {
         Provider::OpenAi => {
             let v = send(p, crate::http().get("https://api.openai.com/v1/models").bearer_auth(&key)).await?;
-            v["data"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|m| {
-                    let id = m["id"].as_str()?;
-                    Some(Model {
-                        id: id.to_owned(),
-                        live: id.contains("realtime"),
-                        generate: true,
-                        created: m["created"].as_i64(),
-                    })
-                })
-                .collect()
+            openai_entries(&v)
         }
         Provider::Gemini => {
             let req = crate::http()
@@ -56,7 +48,61 @@ pub async fn models(store: &Store, p: Provider) -> Result<Value> {
         speech: newest(p, &entries, &speech).unwrap_or(fallback.speech),
     };
     store.kv_set(&defaults_key(p), &serde_json::to_string(&defaults)?)?;
-    Ok(json!({"models": realtime, "transcribe": transcribe, "speech": speech, "defaults": defaults}))
+    let offered = offered_models(p, realtime, &entries, supports_live);
+    Ok(json!({"models": offered, "transcribe": transcribe, "speech": speech, "defaults": defaults}))
+}
+
+fn offered_models(p: Provider, mut realtime: Vec<String>, entries: &[Model], supports_live: bool) -> Vec<String> {
+    if p == Provider::OpenAi && supports_live {
+        realtime.extend(entries.iter().filter(|m| live::is_model(&m.id)).map(|m| m.id.clone()));
+        realtime.sort();
+        realtime.dedup();
+    }
+    realtime
+}
+
+fn openai_entries(value: &Value) -> Vec<Model> {
+    value["data"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            Some(Model {
+                id: m["id"].as_str()?.to_owned(),
+                live: m["id"].as_str()?.contains("realtime"),
+                generate: true,
+                created: m["created"].as_i64(),
+            })
+        })
+        .collect()
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum KeyValidation {
+    Realtime(String),
+    Live(String),
+}
+
+fn validation_model(entries: &[Model]) -> Result<KeyValidation> {
+    let (realtime, _, _) = classify(Provider::OpenAi, entries);
+    if let Some(model) = newest(Provider::OpenAi, entries, &realtime) {
+        return Ok(KeyValidation::Realtime(model));
+    }
+    let live: Vec<String> = entries.iter().filter(|m| live::is_model(&m.id)).map(|m| m.id.clone()).collect();
+    newest(Provider::OpenAi, entries, &live)
+        .map(KeyValidation::Live)
+        .ok_or_else(|| anyhow!("This OpenAI key has no available Realtime or GPT-Live conversation model."))
+}
+
+pub(super) async fn validate_openai_key(key: &str) -> Result<()> {
+    let models = send(Provider::OpenAi, crate::http().get("https://api.openai.com/v1/models").bearer_auth(key)).await?;
+    match validation_model(&openai_entries(&models))? {
+        KeyValidation::Realtime(model) => {
+            super::mint(Provider::OpenAi, key, &model, "marin").await?;
+        }
+        KeyValidation::Live(model) => live::validate_access(key, &model).await?,
+    }
+    Ok(())
 }
 
 /// The provider's current model among `ids`, skipping dated snapshots and previews.
@@ -227,5 +273,25 @@ mod tests {
             pick(&["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview"]).as_deref(),
             Some("gemini-3.8-flash-tts")
         );
+    }
+    #[test]
+    fn live_models_are_opt_in_and_cannot_replace_realtime_defaults() {
+        let entries =
+            [dated("gpt-realtime-2.1", 100), dated("gpt-live-1", 100_000), dated("gpt-live-transcribe", 200_000)];
+        let (realtime, _, _) = classify(Provider::OpenAi, &entries);
+        assert_eq!(newest(Provider::OpenAi, &entries, &realtime).as_deref(), Some("gpt-realtime-2.1"));
+        assert_eq!(offered_models(Provider::OpenAi, realtime.clone(), &entries, false), ["gpt-realtime-2.1"]);
+        assert_eq!(offered_models(Provider::OpenAi, realtime, &entries, true), ["gpt-live-1", "gpt-realtime-2.1"]);
+    }
+    #[test]
+    fn saving_an_openai_key_accepts_live_only_and_realtime_access_but_not_transcription_only() {
+        let entries =
+            |ids: &[&str]| openai_entries(&json!({"data":ids.iter().map(|id| json!({"id":id})).collect::<Vec<_>>()}));
+        assert_eq!(validation_model(&entries(&["gpt-live-1"])).unwrap(), KeyValidation::Live("gpt-live-1".into()));
+        assert_eq!(
+            validation_model(&entries(&["gpt-realtime-2.1", "gpt-live-1"])).unwrap(),
+            KeyValidation::Realtime("gpt-realtime-2.1".into())
+        );
+        assert!(validation_model(&entries(&["gpt-live-transcribe", "gpt-realtime-translate", "gpt-6-luna"])).is_err());
     }
 }

@@ -55,6 +55,21 @@ pub(super) fn call_so_far(lines: &[CallLine], cap: usize) -> String {
     kept.join("\n")
 }
 
+/// Live sends fragments, not complete turns; preserve its spelling across fragment boundaries.
+pub(super) fn user_words(lines: &[CallLine]) -> String {
+    let mut text = String::new();
+    let mut previous_fragment = false;
+    for line in lines.iter().filter(|line| line.from == Speaker::User) {
+        let fragment = line.start_ms.is_some();
+        if !(text.is_empty() || previous_fragment && fragment) {
+            text.push(' ');
+        }
+        text.push_str(&line.text);
+        previous_fragment = fragment;
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,7 +89,15 @@ mod tests {
 
     #[test]
     fn a_replaced_session_hears_the_newest_of_the_call_so_far() {
-        let line = |from, text: &str| CallLine { from, text: text.into(), at: None, id: None };
+        let line = |from, text: &str| CallLine {
+            from,
+            text: text.into(),
+            at: None,
+            id: None,
+            start_ms: None,
+            end_ms: None,
+            fragments: Vec::new(),
+        };
         let lines =
             [line(Speaker::User, "first thing"), line(Speaker::Voice, "noted"), line(Speaker::User, "second thing")];
         assert_eq!(call_so_far(&lines, 1_000), "User: first thing\nYou: noted\nUser: second thing");

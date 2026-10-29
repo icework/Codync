@@ -3,6 +3,7 @@
 //! call gets a short-lived credential minted here and then streams audio to the
 //! provider directly, so audio never crosses the channel or the relay.
 
+pub(crate) mod live;
 mod models;
 
 use crate::market::vault;
@@ -203,7 +204,10 @@ async fn mint(p: Provider, key: &str, model: &str, voice: &str) -> Result<String
 
 /// Which providers have a key here, with their default models.
 pub fn status(store: &Store) -> Result<Value> {
-    let keys = load(store)?;
+    Ok(status_for(store, &load(store)?))
+}
+
+fn status_for(store: &Store, keys: &Keys) -> Value {
     let providers: Vec<Value> = Provider::ALL
         .iter()
         .map(|&p| {
@@ -211,18 +215,19 @@ pub fn status(store: &Store) -> Result<Value> {
             json!({"provider": p.id(), "configured": !keys.get(p).is_empty(), "defaults": defaults})
         })
         .collect();
-    Ok(json!({"providers": providers}))
+    json!({"supportsLive": true, "providers": providers})
 }
 
-/// Checks the key with the provider (one credential mint), then keeps it. An empty key removes it.
+/// Checks an available voice model before saving the key; Live-only access does not create a billable session.
 pub async fn set_key(store: &Store, p: Provider, key: &str) -> Result<Value> {
     let key = key.trim();
     if !key.is_empty() {
-        let voice = match p {
-            Provider::OpenAi => "marin",
-            Provider::Gemini => "Kore",
-        };
-        mint(p, key, &defaults(store, p).realtime, voice).await?;
+        match p {
+            Provider::OpenAi => models::validate_openai_key(key).await?,
+            Provider::Gemini => {
+                mint(p, key, &defaults(store, p).realtime, "Kore").await?;
+            }
+        }
     }
     {
         let _guard = store.connector_lock.lock().map_err(|_| anyhow!("credential storage is busy"))?;
@@ -240,10 +245,14 @@ pub async fn set_key(store: &Store, p: Provider, key: &str) -> Result<Value> {
 /// A credential for a call starting now.
 pub async fn session(store: &Store, p: Provider, model: &str, voice: &str) -> Result<Value> {
     let key = key(store, p)?;
+    if p == Provider::OpenAi && live::is_model(model) {
+        live::validate_access(&key, model).await?;
+        return Ok(json!({"validated": true}));
+    }
     Ok(json!({"credential": mint(p, &key, checked(model)?, checked(voice)?).await?}))
 }
 
-pub use models::models;
+pub use models::{models, models_for_client};
 
 /// Names a speaker is likely to say that speech-to-text would otherwise misspell: the app and
 /// the bots on this computer.
@@ -419,5 +428,16 @@ mod tests {
         assert!(checked("").is_err());
         assert!(Provider::parse("openai").is_ok());
         assert!(Provider::parse("anthropic").is_err());
+    }
+    #[test]
+    fn status_advertises_live_without_changing_realtime_defaults_or_exposing_keys() {
+        let store = Store::open(std::path::Path::new(":memory:")).unwrap();
+        let keys = Keys { openai: "secret-not-returned".into(), gemini: String::new() };
+        let status = status_for(&store, &keys);
+        assert_eq!(status["supportsLive"], true);
+        assert_eq!(status["providers"][0]["configured"], true);
+        assert_eq!(status["providers"][0]["defaults"]["realtime"], "gpt-realtime-2.1");
+        assert_eq!(status["providers"][1]["configured"], false);
+        assert!(!status.to_string().contains("secret-not-returned"));
     }
 }

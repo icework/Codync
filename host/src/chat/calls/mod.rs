@@ -8,6 +8,7 @@
 
 mod announce;
 pub mod context;
+pub mod live;
 mod project;
 mod speech;
 mod sweep;
@@ -47,6 +48,14 @@ pub enum Speaker {
     Voice,
 }
 
+/// An original GPT-Live transcript delta, preserved when adjacent fragments form one displayed line.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallFragment {
+    pub delta: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+}
+
 /// One line of what was said on a call, with when (ms, the app's clock) and the app's id for it, so a line sent
 /// again (its first answer was lost) is kept once.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +66,13 @@ pub struct CallLine {
     pub at: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    /// Provider timeline for a GPT-Live transcript fragment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fragments: Vec<CallFragment>,
 }
 
 /// A call in progress, kept in `kv` so a host restart or a dropped client loses nothing: its bot, the transcript
@@ -76,6 +92,8 @@ struct CallState {
     /// What carries its voice now: how what it hears is worded ([`announce`]).
     #[serde(default)]
     mode: CallMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    live_session: Option<String>,
 }
 
 impl CallState {
@@ -89,6 +107,7 @@ impl CallState {
             last: now,
             owner: String::new(),
             mode: CallMode::default(),
+            live_session: None,
         }
     }
 }
@@ -212,6 +231,9 @@ fn transcript(raw: &Value) -> Vec<CallLine> {
                 text: crate::agent::acp::truncate(text, MAX_LINE_CHARS),
                 at: line.at,
                 id: line.id.filter(|id| checked(id).is_ok()),
+                start_ms: line.start_ms,
+                end_ms: line.end_ms,
+                fragments: line.fragments,
             })
         })
         .take(MAX_LINES)
@@ -246,13 +268,14 @@ pub async fn start(hub: &Arc<Hub>, b: &Value, owner: &str) -> Result<Value> {
             Some(s) if s.bot != bot => bail!("that call belongs to another bot"),
             // A session the provider replaced, maybe on another device or in another mode now.
             Some(s) => {
-                let s = CallState { owner: owner.to_owned(), mode, ..s };
+                let s = CallState { owner: owner.to_owned(), mode, live_session: None, ..s };
                 save(&hub.store, call, &s)?;
                 s.lines
             }
             None => bail!("that call has ended"),
         }
     };
+    live::end(hub, call);
     announce::watch(hub, call, bot);
     let provider = b["provider"].as_str().map(crate::voice::Provider::parse).transpose()?;
     let mut out = json!({
@@ -291,8 +314,7 @@ fn take_said(store: &Store, call: &str) -> Result<String> {
     let mut s = state(store, call).ok_or_else(|| anyhow!("no such call"))?;
     s.last = now_ms();
     let unheard = s.lines.get(s.handoff..).unwrap_or_default();
-    let said =
-        unheard.iter().filter(|l| l.from == Speaker::User).map(|l| l.text.as_str()).collect::<Vec<_>>().join(" ");
+    let said = speech::user_words(unheard);
     s.handoff = s.lines.len();
     save(store, call, &s)?;
     Ok(said)
@@ -328,6 +350,7 @@ fn end_when(
         mark_open(&hub.store, call, false)?;
         (s, seconds)
     };
+    live::end(hub, call);
     let bot = s.as_ref().map_or(bot, |s| s.bot.as_str()).to_owned();
     let cfg = hub.store.bot(&bot)?.filter(|r| !r.deleted).ok_or_else(|| anyhow!("unknown bot"))?.config;
     let mut data = json!({"text": UNTITLED, "callSeconds": seconds, "call": call});

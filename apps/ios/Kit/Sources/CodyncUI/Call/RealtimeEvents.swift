@@ -4,8 +4,9 @@ import Foundation
 /// WebRTC callbacks arrive on its signaling thread; this hops them to the main actor.
 final class RealtimeEvents: NSObject, RTCPeerConnectionDelegate, RTCDataChannelDelegate, Sendable {
     private let owner: WeakEngine
+    private let generation: Int
 
-    @MainActor init(owner: OpenAIRealtimeEngine) { self.owner = WeakEngine(owner) }
+    @MainActor init(owner: OpenAIRealtimeEngine, generation: Int) { self.owner = WeakEngine(owner); self.generation = generation }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
@@ -17,26 +18,26 @@ final class RealtimeEvents: NSObject, RTCPeerConnectionDelegate, RTCDataChannelD
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
-        let owner = owner
-        Task { @MainActor in owner.value?.iceChanged(newState) }
+        let (owner, generation) = (owner, generation)
+        Task { @MainActor in owner.value?.iceChanged(newState, generation: generation) }
     }
 
     func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
         let (state, channel) = (dataChannel.readyState, ObjectIdentifier(dataChannel))
-        let owner = owner
+        let (owner, generation) = (owner, generation)
         Task { @MainActor in
-            if state == .open { owner.value?.opened() } else if state == .closed { owner.value?.channelClosed(channel) }
+            if state == .open { owner.value?.opened(generation: generation) } else if state == .closed { owner.value?.channelClosed(channel, generation: generation) }
         }
     }
 
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
         let data = buffer.data
-        let owner = owner
-        Task { @MainActor in owner.value?.received(data) }
+        let (owner, generation) = (owner, generation)
+        Task { @MainActor in owner.value?.received(data, generation: generation) }
     }
 }
 
-private final class WeakEngine: Sendable {
+final class WeakEngine: Sendable {
     @MainActor weak var value: OpenAIRealtimeEngine?
     @MainActor init(_ value: OpenAIRealtimeEngine) { self.value = value }
 }

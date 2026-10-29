@@ -4,6 +4,9 @@ use super::{Defaults, Provider, defaults_key, key, live, send};
 use crate::store::Store;
 use anyhow::{Result, anyhow};
 use serde_json::{Value, json};
+use std::time::Duration;
+
+const KEY_VALIDATION_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Models the key can use, from the provider's own list: realtime (conversation),
 /// transcribe (speech to text) and speech (text to speech).
@@ -41,15 +44,20 @@ pub async fn models_for_client(store: &Store, p: Provider, supports_live: bool) 
         }
     };
     let (realtime, transcribe, speech) = classify(p, &entries);
-    let fallback = p.fallback();
-    let defaults = Defaults {
-        realtime: newest(p, &entries, &realtime).unwrap_or(fallback.realtime),
-        transcribe: newest(p, &entries, &transcribe).unwrap_or(fallback.transcribe),
-        speech: newest(p, &entries, &speech).unwrap_or(fallback.speech),
-    };
+    let defaults = model_defaults(p, &entries);
     store.kv_set(&defaults_key(p), &serde_json::to_string(&defaults)?)?;
     let offered = offered_models(p, realtime, &entries, supports_live);
     Ok(json!({"models": offered, "transcribe": transcribe, "speech": speech, "defaults": defaults}))
+}
+
+fn model_defaults(p: Provider, entries: &[Model]) -> Defaults {
+    let (realtime, transcribe, speech) = classify(p, entries);
+    let fallback = p.fallback();
+    Defaults {
+        realtime: newest(p, entries, &realtime).unwrap_or(fallback.realtime),
+        transcribe: newest(p, entries, &transcribe).unwrap_or(fallback.transcribe),
+        speech: newest(p, entries, &speech).unwrap_or(fallback.speech),
+    }
 }
 
 fn offered_models(p: Provider, mut realtime: Vec<String>, entries: &[Model], supports_live: bool) -> Vec<String> {
@@ -94,15 +102,45 @@ fn validation_model(entries: &[Model]) -> Result<KeyValidation> {
         .ok_or_else(|| anyhow!("This OpenAI key has no available Realtime or GPT-Live conversation model."))
 }
 
-pub(super) async fn validate_openai_key(key: &str) -> Result<()> {
-    let models = send(Provider::OpenAi, crate::http().get("https://api.openai.com/v1/models").bearer_auth(key)).await?;
-    match validation_model(&openai_entries(&models))? {
-        KeyValidation::Realtime(model) => {
-            super::mint(Provider::OpenAi, key, &model, "marin").await?;
-        }
-        KeyValidation::Live(model) => live::validate_access(key, &model).await?,
-    }
-    Ok(())
+pub(super) async fn validate_openai_key(key: &str, fallback: &str) -> Result<Option<Defaults>> {
+    validate_openai_with(
+        send(Provider::OpenAi, crate::http().get("https://api.openai.com/v1/models").bearer_auth(key)),
+        fallback,
+        KEY_VALIDATION_TIMEOUT,
+        |validation| async move {
+            match validation {
+                KeyValidation::Realtime(model) => {
+                    super::mint(Provider::OpenAi, key, &model, "marin").await?;
+                }
+                KeyValidation::Live(model) => live::validate_access(key, &model).await?,
+            }
+            Ok(())
+        },
+    )
+    .await
+}
+
+async fn validate_openai_with<F: Future<Output = Result<()>>>(
+    models: impl Future<Output = Result<Value>>,
+    fallback: &str,
+    budget: Duration,
+    validate: impl FnOnce(KeyValidation) -> F,
+) -> Result<Option<Defaults>> {
+    tokio::time::timeout(budget, async {
+        let (validation, defaults) = match models.await {
+            Ok(models) => {
+                let entries = openai_entries(&models);
+                (validation_model(&entries)?, Some(model_defaults(Provider::OpenAi, &entries)))
+            }
+            // Restricted keys may create Realtime sessions without permission to enumerate models.
+            // A real credential mint must still succeed before the key can be saved.
+            Err(_) => (KeyValidation::Realtime(fallback.to_owned()), None),
+        };
+        validate(validation).await?;
+        Ok(defaults)
+    })
+    .await
+    .map_err(|_| anyhow!("OpenAI key validation timed out. The key was not saved; try again."))?
 }
 
 /// The provider's current model among `ids`, skipping dated snapshots and previews.
@@ -189,6 +227,86 @@ fn classify(p: Provider, models: &[Model]) -> (Vec<String>, Vec<String>, Vec<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn restricted_key_can_validate_without_model_listing_permission() {
+        let mint_called = &std::cell::Cell::new(false);
+        let defaults = validate_openai_with(
+            async { Err(anyhow!("OpenAI answered 403: missing api.model.read")) },
+            "saved-realtime-model",
+            KEY_VALIDATION_TIMEOUT,
+            |validation| async move {
+                assert_eq!(validation, KeyValidation::Realtime("saved-realtime-model".into()));
+                mint_called.set(true);
+                Ok(())
+            },
+        )
+        .await
+        .unwrap();
+        assert!(mint_called.get());
+        assert!(defaults.is_none(), "failed discovery must not trigger another model request after saving");
+    }
+
+    #[tokio::test]
+    async fn failed_discovery_does_not_bypass_credential_validation() {
+        let result = validate_openai_with(
+            async { Err(anyhow!("Model listing forbidden")) },
+            "gpt-realtime-2.1",
+            KEY_VALIDATION_TIMEOUT,
+            async |_| Err(anyhow!("Invalid API key")),
+        )
+        .await;
+        assert_eq!(result.unwrap_err().to_string(), "Invalid API key");
+    }
+
+    #[tokio::test]
+    async fn live_only_key_still_uses_model_access_validation() {
+        validate_openai_with(
+            async { Ok(json!({"data": [{"id": "gpt-live-1"}]})) },
+            "gpt-realtime-2.1",
+            KEY_VALIDATION_TIMEOUT,
+            |validation| async move {
+                assert_eq!(validation, KeyValidation::Live("gpt-live-1".into()));
+                Ok(())
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn successful_validation_reuses_discovered_defaults() {
+        let defaults = validate_openai_with(
+            async { Ok(json!({"data": [{"id": "gpt-realtime-2.2"}]})) },
+            "gpt-realtime-2.1",
+            KEY_VALIDATION_TIMEOUT,
+            |validation| async move {
+                assert_eq!(validation, KeyValidation::Realtime("gpt-realtime-2.2".into()));
+                Ok(())
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(defaults.realtime, "gpt-realtime-2.2");
+    }
+
+    #[tokio::test]
+    async fn discovery_and_fallback_validation_share_a_deadline_before_saving() {
+        let budget = Duration::from_millis(10);
+        let pending_discovery = validate_openai_with(std::future::pending(), "gpt-realtime-2.1", budget, |_| async {
+            panic!("must not validate a key before discovery finishes")
+        })
+        .await;
+        assert!(pending_discovery.unwrap_err().to_string().contains("not saved"));
+
+        let pending_mint =
+            validate_openai_with(async { Err(anyhow!("Model listing forbidden")) }, "gpt-realtime-2.1", budget, |_| {
+                std::future::pending()
+            })
+            .await;
+        assert!(pending_mint.unwrap_err().to_string().contains("not saved"));
+    }
 
     fn ids(p: Provider, ids: &[&str]) -> (Vec<String>, Vec<String>, Vec<String>) {
         let models: Vec<Model> = ids

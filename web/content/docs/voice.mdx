@@ -128,6 +128,8 @@ The shortcut needs no Accessibility or Input Monitoring permission, and the app 
 
 In **Voice chat**, choose **OpenAI**, **Realtime**, then a `gpt-live-*` model offered by your API key (for example `gpt-live-1`). This requires a host and client with GPT-Live support. Existing Realtime choices and defaults stay unchanged. Availability comes from OpenAI's API model list; a ChatGPT product rollout does not imply the same model name is available through the API.
 
+For a restricted OpenAI key, allow model-read access to discover and test GPT-Live models. A key without model-list permission can still be saved for Realtime if it can create a Realtime session with the computer's default model.
+
 GPT-Live handles speech while a Responses model (`gpt-6-luna`) routes requests to Codync's existing voice tools. Your bot still does the work on your computer, with its existing permissions. The voice can send tasks, check status, read recent messages, search memory, answer an approval after you choose an option, and stop the bot. OpenAI bills the Live session and Responses routing separately, in addition to any usage by your bot's agent.
 
 **Test** checks model access without creating a paid Live session; a successful test does not verify microphone audio or that the routing model can run. Start a short call to verify those. Audio flows directly between your device and OpenAI; your API key stays on the host. The conversation context and tool results are sent to OpenAI to support the call.

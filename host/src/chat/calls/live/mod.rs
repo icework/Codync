@@ -5,6 +5,7 @@ mod protocol;
 #[cfg(test)]
 mod tests;
 mod transcript;
+pub(super) use transcript::continues;
 
 use super::{CallMode, CallState, STATE, Speaker, begun, checked, save, state};
 use crate::LockExt;

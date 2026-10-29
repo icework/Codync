@@ -6,6 +6,13 @@ const GAP_MS: i64 = 1_500;
 const LINE_BYTES: usize = 2_000;
 const MAX_FRAGMENTS: usize = 128;
 
+/// Fragments may cross storage-line limits, but never a speaker, pause or session boundary.
+pub(in crate::chat::calls) fn continues(last: &CallLine, speaker: Speaker, start_ms: i64, epoch: i64) -> bool {
+    last.from == speaker
+        && last.start_ms.is_some_and(|first| last.at == Some(epoch.saturating_add(first)) && start_ms >= first)
+        && last.end_ms.is_some_and(|end| start_ms <= end.saturating_add(GAP_MS))
+}
+
 pub(super) fn append(s: &mut CallState, speaker: Speaker, text: &str, start_ms: i64, end_ms: i64, epoch: i64) {
     let mut rest = text;
     while !rest.is_empty() {
@@ -18,9 +25,7 @@ pub(super) fn append(s: &mut CallState, speaker: Speaker, text: &str, start_ms: 
         let unheard = s.lines.len() > s.handoff;
         if let Some(last) = s.lines.last_mut().filter(|last| {
             unheard
-                && last.from == speaker
-                && last.start_ms.is_some_and(|first| last.at == Some(epoch.saturating_add(first)) && start_ms >= first)
-                && last.end_ms.is_some_and(|end| start_ms <= end.saturating_add(GAP_MS))
+                && continues(last, speaker, start_ms, epoch)
                 && last.text.len() + piece.len() <= LINE_BYTES
                 && last.fragments.len() < MAX_FRAGMENTS
         }) {
@@ -77,5 +82,27 @@ mod tests {
         append(&mut s, Speaker::User, &long, 3000, 4000, 200);
         assert_eq!(s.lines[4..].iter().map(|l| l.text.as_str()).collect::<String>(), long);
         assert!(s.lines[4..].iter().all(|line| line.text.len() <= LINE_BYTES));
+    }
+
+    #[test]
+    fn bot_handoff_preserves_turn_boundaries_and_split_words() {
+        use super::super::super::speech::user_words;
+        let mut s = CallState::new("b");
+        append(&mut s, Speaker::User, "Open foo.ts", 0, 10, 100);
+        append(&mut s, Speaker::Voice, "What next?", 10, 20, 100);
+        append(&mut s, Speaker::User, "Run tests", 20, 30, 100);
+        assert_eq!(user_words(&s.lines), "Open foo.ts Run tests");
+
+        append(&mut s, Speaker::User, "Then lint", 3000, 3010, 100);
+        assert_eq!(user_words(&s.lines), "Open foo.ts Run tests Then lint");
+        append(&mut s, Speaker::User, "Again", 0, 10, 5000);
+        assert_eq!(user_words(&s.lines), "Open foo.ts Run tests Then lint Again");
+
+        // A single utterance split at the byte limit must retain exact CJK/filename spelling.
+        let long = "你好app.ts".repeat(500);
+        let mut split = CallState::new("b");
+        append(&mut split, Speaker::User, &long, 0, 1000, 100);
+        assert!(split.lines.len() > 1);
+        assert_eq!(user_words(&split.lines), long);
     }
 }

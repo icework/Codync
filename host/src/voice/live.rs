@@ -65,7 +65,17 @@ pub(crate) fn request(
             "client": {"data_channel": {
                 "allowed_client_events": ["response.item.create", "response.create", "session.commentary.append",
                     "session.thinking.append", "session.instructions.append", "session.close"],
-                "allowed_server_events": "all",
+                // Token deltas are unused by the host and can saturate the clients' ordered RPC queues.
+                "allowed_server_events": [
+                    {"type": "session.started"}, {"type": "session.closed"}, {"type": "error"},
+                    {"type": "session.input_transcript.delta"}, {"type": "session.output_transcript.delta"},
+                    {"type": "response.event", "response_event": "response.created"},
+                    {"type": "response.event", "response_event": "response.output_item.done"},
+                    {"type": "response.event", "response_event": "response.completed"},
+                    {"type": "response.event", "response_event": "response.failed"},
+                    {"type": "response.event", "response_event": "response.incomplete"},
+                    {"type": "response.event", "response_event": "response.cancelled"},
+                ],
             }},
         },
         "transport": {"type": "webrtc", "sdp": sdp},
@@ -143,5 +153,37 @@ mod tests {
         assert_eq!(body["session"]["store"], false);
         assert!(body["session"]["credential"].is_null());
         assert!(request("gpt-live-1", "marin", &"x".repeat(MAX_SDP_BYTES + 1), "", "", &json!([])).is_err());
+    }
+
+    #[test]
+    fn data_channel_keeps_tool_lifecycle_without_streaming_backend_tokens() {
+        let body = request("gpt-live-1", "marin", "v=0\r\n", "", "", &json!([])).unwrap();
+        let allowed = body["session"]["client"]["data_channel"]["allowed_server_events"].as_array().unwrap();
+        let receives = |kind: &str, nested: Option<&str>| {
+            allowed.iter().any(|selector| selector["type"] == kind && selector["response_event"].as_str() == nested)
+        };
+        // A long argument/text generation must not enqueue thousands of client-to-host RPCs.
+        for kind in ["response.function_call_arguments.delta", "response.output_text.delta", "response.in_progress"] {
+            assert!(!receives("response.event", Some(kind)));
+        }
+        for kind in [
+            "response.created",
+            "response.output_item.done",
+            "response.completed",
+            "response.failed",
+            "response.incomplete",
+            "response.cancelled",
+        ] {
+            assert!(receives("response.event", Some(kind)), "missing lifecycle event: {kind}");
+        }
+        for kind in [
+            "session.started",
+            "session.closed",
+            "error",
+            "session.input_transcript.delta",
+            "session.output_transcript.delta",
+        ] {
+            assert!(receives(kind, None), "missing call event: {kind}");
+        }
     }
 }

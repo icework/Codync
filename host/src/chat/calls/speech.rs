@@ -55,17 +55,25 @@ pub(super) fn call_so_far(lines: &[CallLine], cap: usize) -> String {
     kept.join("\n")
 }
 
-/// Live sends fragments, not complete turns; preserve its spelling across fragment boundaries.
+/// Preserve Live spelling across storage fragments without joining independent user turns.
 pub(super) fn user_words(lines: &[CallLine]) -> String {
     let mut text = String::new();
-    let mut previous_fragment = false;
-    for line in lines.iter().filter(|line| line.from == Speaker::User) {
-        let fragment = line.start_ms.is_some();
-        if !(text.is_empty() || previous_fragment && fragment) {
+    let mut previous = None;
+    for line in lines {
+        if line.from != Speaker::User {
+            previous = None;
+            continue;
+        }
+        let continuous = previous.is_some_and(|last| {
+            line.start_ms.zip(line.at).is_some_and(|(start, at)| {
+                at.checked_sub(start).is_some_and(|epoch| super::live::continues(last, line.from, start, epoch))
+            })
+        });
+        if !(text.is_empty() || continuous) {
             text.push(' ');
         }
         text.push_str(&line.text);
-        previous_fragment = fragment;
+        previous = Some(line);
     }
     text
 }

@@ -221,22 +221,27 @@ fn status_for(store: &Store, keys: &Keys) -> Value {
 /// Checks an available voice model before saving the key; Live-only access does not create a billable session.
 pub async fn set_key(store: &Store, p: Provider, key: &str) -> Result<Value> {
     let key = key.trim();
-    if !key.is_empty() {
+    let discovered = if key.is_empty() {
+        None
+    } else {
         match p {
-            Provider::OpenAi => models::validate_openai_key(key).await?,
+            Provider::OpenAi => models::validate_openai_key(key, &defaults(store, p).realtime).await?,
             Provider::Gemini => {
                 mint(p, key, &defaults(store, p).realtime, "Kore").await?;
+                None
             }
         }
-    }
+    };
     {
         let _guard = store.connector_lock.lock().map_err(|_| anyhow!("credential storage is busy"))?;
         let mut keys = load(store)?;
         keys.set(p, key.to_owned());
         vault::write(store, SLOT, &serde_json::to_string(&keys)?)?;
     }
-    if !key.is_empty() {
-        // A new key may see newer models; the daily refresh would only get there tomorrow.
+    if let Some(defaults) = discovered {
+        // Reuse discovery done during validation; no network wait after the OpenAI key is saved.
+        store.kv_set(&defaults_key(p), &serde_json::to_string(&defaults)?)?;
+    } else if !key.is_empty() && p == Provider::Gemini {
         let _ = models(store, p).await;
     }
     status(store)

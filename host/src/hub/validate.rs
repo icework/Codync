@@ -10,6 +10,7 @@ pub(crate) fn validate(cfg: &BotConfig) -> Result<()> {
     if cfg.is_group() {
         return Ok(());
     }
+    // The bot a call or shortcut that names none talks to stays in sight.
     if cfg.lead && cfg.hidden {
         bail!("the lead bot can't be hidden");
     }

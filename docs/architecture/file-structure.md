@@ -9,6 +9,7 @@ Codync/
 ├── host/                      # Rust daemon and terminal client
 │   ├── src/
 │   │   ├── main.rs            # CLI entry, shared helpers (LockExt, http)
+│   │   ├── *_cli.rs           # Subcommands with their own module: cloud, network, send (+ send_cli/: event feed, --wait)
 │   │   ├── hub.rs, store/     # Shared state + event fan-out / SQLite persistence (schema, model, bots, entries, devices)
 │   │   ├── service/           # Data dir, launchd/systemd/Windows install, keep-awake
 │   │   ├── usage/, mcp.rs     # usage/: plan limits from each agent; mcp.rs: built-in stdio MCP servers; mcp/remote.rs: remote connector proxy
@@ -54,6 +55,7 @@ Codync/
 │   │   ├── app/               # Screens, the store (AppStore), notifications, Live updates, Glance widgets
 │   │   └── tools/             # symbols.py (SF Symbol stand-ins), launcher_icon.py, agent_icons.py
 │   ├── screen-macos/          # macOS screen helper (Xcode Screen target)
+│   ├── screen-macos-tests/    # Swift package testing the helper's socket lifecycle and candidate rules
 │   └── screen-linux/          # Linux portal/GStreamer screen helper
 ├── cloud/                     # Account API + encrypted relay Worker and Durable Object
 │   ├── src/
@@ -77,6 +79,7 @@ Codync/
 - `apps/desktop/` — desktop app for macOS, Linux and Windows (Electron; `npm run dev`, packaged by `.github/workflows/release-desktop.yml`)
 - `iOS` (`apps/ios/`) — iOS app
 - `Screen` (`apps/screen-macos/`) — Codync Screen: capture, input and WebRTC for Remote screen, embedded in the macOS desktop app (`Contents/Library/LoginItems`); starts the computer-use driver it carries in `Contents/Helpers`
+- `apps/screen-macos-tests/` — native helper tests: socket lifecycle and candidate rules (`swift test --package-path apps/screen-macos-tests --scratch-path build/dd/screen-macos-tests`)
 - `apps/screen-linux/` — `codync-screen` (Rust, GStreamer + xdg portals), the Linux Remote screen helper
 - `Widgets` (`apps/ios/Widgets/`) — usage widget + bot Live Activity (bundle id `com.pokai.Codync.ios.LiveActivity`)
 - `apps/android/` — Android app (`com.pokai.Codync.android`, Dev `.dev`; Gradle modules `app`, `core`, `design`; CI `.github/workflows/android.yml`)
@@ -86,7 +89,7 @@ Codync/
 
 | Responsibility | Source entry points |
 |---|---|
-| CLI and background service | `host/src/main.rs`, `service/` |
+| CLI and background service | `host/src/main.rs`, `service/`; subcommands `cloud_cli.rs`, `network_cli.rs`, `send_cli.rs` (+ `send_cli/events.rs`, `wait.rs`) |
 | API, caller permissions, event ordering | `host/src/api/`, `hub.rs` |
 | SQLite transcript, bots, lanes and sessions | `host/src/store/` (`entries.rs`, `bots.rs`, `model.rs`, `devices.rs`, `schema.rs`) |
 | Agent process, ACP, queue and session lifecycle | `host/src/agent/bot/` (`launch.rs`, `queue.rs`, `session.rs`, `turn.rs`, `updates.rs`), `acp.rs` (+ `acp/codebuddy.rs`, CodeBuddy's ACP extensions), `process.rs` (process-tree ownership; `process_windows.rs` on Windows) |
@@ -107,7 +110,7 @@ Codync/
 | Swift transport and cloud API | `apps/ios/Kit/Sources/CodyncKit/Client/` |
 | Account aggregation / one host mirror | `apps/ios/Kit/Sources/CodyncUI/Store/AccountStore.swift` / `BotStore.swift` (+ `BotStore+Connection`, `+Sync`, `+Sending`, `+Actions`, `+Plugins`, `+Cache`, `+Shortcuts`) |
 | iPhone chat, replies, composer and trace | `apps/ios/Kit/Sources/CodyncUI/Thread/` |
-| Reusable iPhone UI chrome | `apps/ios/Kit/Sources/CodyncUI/Chrome.swift`, `Controls.swift`, `Platform.swift` |
+| Reusable iPhone UI chrome | `apps/ios/Kit/Sources/CodyncUI/Chrome.swift`, `Controls.swift`, `MenuItem.swift` (system menus: `MenuItem`, `.contextActions`, `DropdownMenu`), `Platform.swift` |
 | iOS navigation, pairing, account, settings, computer management | `apps/ios/Views/RootView.swift`, `BotListView.swift`, `PairingView.swift`, `AccountSwitcherView.swift`, `SettingsView.swift`, `ComputersView.swift` |
 | Apple account sessions / public environment config | `apps/ios/App/AccountSession.swift`, `apps/shared/Config/` |
 | Desktop local host / SSH lifecycle | `apps/desktop/src/main/host-controller.ts`, `ssh.ts` |

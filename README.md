@@ -7,7 +7,7 @@
 **The open-source Grok Bot alternative.**<br>
 Bring your own agent and subscription — Claude Code, Codex, Gemini CLI, Cursor and 40+ more — as teammates you can message from your phone.
 
-[Website](https://www.codync.dev) · [Docs](https://www.codync.dev/docs) · [Compare](https://www.codync.dev/compare) · [Launch film](https://youtu.be/QAhyZWpV70U)
+[Website](https://www.codync.dev) · [Docs](https://www.codync.dev/docs) · [Compare](https://www.codync.dev/compare) · [Launch film](https://youtu.be/QAhyZWpV70U) · [X @trycodync](https://x.com/trycodync)
 
 [![Star Codync on GitHub](https://img.shields.io/github/stars/leepokai/Codync?style=social&label=Star)](https://github.com/leepokai/Codync/stargazers)<br>
 <sub>Free, open source, no paid tier. A ⭐ is how others find it.</sub>
@@ -41,6 +41,9 @@ macOS: Apple Silicon + Intel (DMG) · Windows: x64 installer · Linux: AppImage 
 
 </div>
 
+> [!WARNING]
+> **Official account:** `@trycodync` is my only official account. Beware of impersonators and scams.
+
 Codync turns the coding agents on your computer — Claude Code, Codex, Cursor, Pi, OpenCode, Grok Build, Gemini, Copilot, Hermes Agent and ~40 more — into persistent *bots* you delegate to from your iPhone, Mac, Windows PC, Linux desktop or any terminal, the way you'd message a colleague. Pick who, say what, put the phone away. You get a notification when a bot finishes or needs your approval.
 
 > Why bots? On a phone, "find the right working session, then pick an environment" is too slow. With bots you already know who to hand the intent to: open the chat, type, done.
@@ -55,7 +58,7 @@ Codync turns the coding agents on your computer — Claude Code, Codex, Cursor, 
 - **One app per kind of device.** Native SwiftUI on the iPhone, one desktop app for Mac, Windows and Linux (Electron), and a terminal UI for SSH.
 - **A Grok Bot, Muse and Dots alternative.** Persistent named bots, group chats, quote replies, bots asking each other for help, approval cards, per-bot memory, remote screen, voice calls and "needs you / done" notifications — the same features, without being tied to one model or one subscription.
 - **Reach your computer from anywhere, free.** The hosted Cloudflare relay is included at no cost: no Tailscale, no VPN, no port forwarding. Traffic is end-to-end encrypted between your phone and your computer, so the relay only forwards ciphertext. Same Wi-Fi or Tailscale? The phone connects directly instead.
-- **Every computer, one app.** Sign in and your iPhone lists every computer on your account (Mac, Windows PC, Linux desktop, server or cloud VM); open Computers and tap **Ask for access**, confirm a 6-digit code on that computer, and its bots show up next to the others. A new bot can live on any of them, and the Mac app reaches your SSH machines too. Each computer approves each device itself, so an account alone never unlocks a computer.
+- **Every computer, one app.** Sign in and your iPhone lists every computer on your account (Mac, Windows PC, Linux desktop, server or cloud VM); open Computers and tap **Ask for access**, confirm a 6-digit code on that computer, and its bots show up next to the others. A new bot can live on any of them, and the desktop app on Mac, Windows and Linux reaches your SSH machines too. Each computer approves each device itself, so an account alone never unlocks a computer.
 - **Remote screen.** See and control your computer from the iPhone over WebRTC (hardware H.264), and let bots use the screen themselves through the built-in `computer` tool.
 - **Voice calls.** Talk to a bot hands-free from the iPhone and hear its replies read aloud.
 - **Private push.** Notification text is sealed to your phone's key, so the push relay never sees what your bots said.
@@ -158,6 +161,7 @@ and computer identity; do not use **Reset all data**, a cleanup utility, or Home
 |---|---|
 | `codync-host install` / `uninstall` | background service (launchd on macOS, systemd `--user` on Linux, the sign-in Run key on Windows) |
 | `codync-host tui [--url … --token …]` | message your bots from a terminal (this computer by default; SSH-friendly) |
+| `codync-host send --bot <id-or-name> [--wait] [--json] <text>...` | send from a script, optionally waiting for the final reply |
 | `codync-host pair [--json]` | pairing QR code / link |
 | `codync-host status` | installed? running? |
 | `codync-host serve [--port 19222]` | run in the foreground |
@@ -168,7 +172,17 @@ and computer identity; do not use **Reset all data**, a cleanup utility, or Home
 | `codync-host devices` | list/revoke authorized remote devices |
 | `codync-host access` | review device access requests |
 
-Data lives in `~/.codync`. The local bearer token authorizes loopback helpers and SSH-forwarded callers. Remote devices use individual keys and grants over the encrypted channel; revoke a lost device through device management rather than rotating the loopback token. Host methods and caller permissions live in `host/src/api/`.
+For non-interactive work, send a message and wait for a machine-readable result:
+
+```powershell
+codync-host send --bot reviewer --wait --json "Review the current diff without modifying files."
+```
+
+`--bot` accepts an ID or an exact, case-insensitive name; duplicate names require an ID. Use positional text or `--file request.txt` to read UTF-8 (`--file -` reads stdin). `--reply-to <id>` quotes a message of the bot's chat: the `entryId` or `replyId` of an earlier `--json` result. Without `--wait`, the command prints the accepted message's `id`, `seq` and `turn`; with `--wait`, it prints the reply once the bot is done (a reply in several messages comes joined; a turn that ends with no text, such as only a reaction, prints nothing). Group chats can't be waited on. Queued messages retain the host's batching behavior, so multiple sends can share one reply and turn.
+
+`--timeout <seconds>` defaults to 1800 active seconds. Pending approval pauses the clock and prints a summary to stderr; the command never approves a request or stops the bot on timeout. Notices also go to stderr. `--json` emits one JSON object with `botId`, `entryId`, `entrySeq`, `turn`, `status` (`completed`, `failed`, or `timeout`), optional `stopReason`, `reply` and `replyId`, `notices`, `elapsedSeconds` (wall time), and `waitedForApprovalSeconds`. Without `--wait`, `completed` means the send was accepted. Errors before acceptance only use stderr. Exit codes are **0** completed/accepted, **1** stopped/limited/declined/failed, **2** invalid arguments, missing/ambiguous bot or `--wait` on a group chat, **3** unavailable host or refused API request, and **4** timeout. See `codync-host send --help` for all options.
+
+Data lives in `~/.codync`. The local bearer token authorizes loopback helpers and SSH-forwarded callers. Use `--port` and `CODYNC_HOME` when targeting a host with a different port or data directory; development builds default to port 19223 and `~/.codync-dev`. Remote devices use individual keys and grants over the encrypted channel; revoke a lost device through device management rather than rotating the loopback token. Host methods and caller permissions live in `host/src/api/`.
 
 ## FAQ
 

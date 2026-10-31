@@ -90,7 +90,6 @@ struct AppLanguageTests {
         #expect(L10n.tr("Settings", preference: .zh, systemIsChinese: false) == "设置")
         #expect(L10n.tr("Settings", preference: .zhHant, systemIsChinese: false) == "設定")
         #expect(L10n.tr("Files", preference: .zhHant, systemIsChinese: false) == "檔案")
-        #expect(L10n.tr("New session", preference: .zh, systemIsChinese: false) == "新会话")
         #expect(L10n.tr("Delete bot", preference: .zh, systemIsChinese: false) == "删除 Bot")
         #expect(L10n.tr("Connected", preference: .zh, systemIsChinese: false) == "已连接")
         #expect(L10n.tr("Ask {name}", preference: .zh, systemIsChinese: false) == "问 {name}")

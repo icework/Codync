@@ -8,6 +8,8 @@
 //! The device's authorization is re-checked on every request, whenever the device
 //! table changes and when its lease runs out; a revoked device is closed at once.
 
+mod subscriptions;
+
 use crate::LockExt;
 use crate::api;
 use crate::api::devices::{self, Caller, RejectCode};
@@ -28,8 +30,8 @@ use x25519_dalek::StaticSecret;
 
 /// Largest WebSocket message accepted (and the Cloudflare limit); 256 KiB chunks fit.
 pub const MAX_WS_MESSAGE: usize = 1 << 20;
-/// Largest reassembled device → host message.
-const MAX_INBOUND: usize = 1 << 20;
+/// Largest reassembled authorized device → host message (5 MiB icon + base64/JSON).
+const MAX_INBOUND: usize = 8 << 20;
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Channel keys are replaced (close `4011`) after this long.
 const MAX_AGE: Duration = Duration::from_hours(24);
@@ -186,7 +188,7 @@ pub async fn run(hub: Arc<Hub>, t: Transport, kind: ChannelKind) {
         lease: None,
         online: None,
     };
-    let opener = Opener::new(hs.keys.d2h, MAX_INBOUND);
+    let opener = Opener::new(hs.keys.d2h, if hs.device.is_some() { MAX_INBOUND } else { 1 << 20 });
     let (code, reason) = if let Some(d) = hs.device {
         ch.set_device(&d);
         ch.serve(&mut incoming, opener, &mut writer).await
@@ -494,53 +496,6 @@ impl Channel {
         });
     }
 
-    async fn subscribe(&self, id: u64, kind: &str, b: &Value) {
-        if self.count(true) >= MAX_SUBS {
-            self.send(err(id, 429, "too many subscriptions")).await;
-            return;
-        }
-        let stream = match kind {
-            "events" => match api::events_stream(
-                &self.hub,
-                b["since"].as_i64().unwrap_or(0),
-                b["client"].as_str(),
-                &self.caller,
-            ) {
-                Ok(s) => s.boxed(),
-                Err(e) => {
-                    self.send(err(id, 500, &format!("{e:#}"))).await;
-                    return;
-                }
-            },
-            "term" => {
-                let Some(s) = api::term_events(&self.hub, b["term"].as_str().unwrap_or_default()) else {
-                    self.send(err(id, 404, "that terminal is gone")).await;
-                    return;
-                };
-                s.boxed()
-            }
-            _ => {
-                self.send(err(id, 400, "unknown subscription")).await;
-                return;
-            }
-        };
-        let (jobs, tx) = (self.jobs.clone(), self.tx.clone());
-        // Held while spawning so the task can't finish (and remove itself) before it's listed.
-        let mut list = self.jobs.locked();
-        let task = tokio::spawn(async move {
-            let mut stream = stream;
-            while let Some(ev) = stream.next().await {
-                if tx.send(ToDevice::Inner(json!({"id": id, "ev": ev}))).await.is_err() {
-                    return;
-                }
-            }
-            if jobs.locked().remove(&id).is_some() {
-                let _ = tx.send(ToDevice::Inner(json!({"id": id, "end": true}))).await;
-            }
-        });
-        list.insert(id, Job::Sub(task.abort_handle()));
-    }
-
     async fn cancel(&self, id: u64) {
         let job = self.jobs.locked().remove(&id);
         if let Some(Job::Sub(h)) = job {
@@ -614,6 +569,7 @@ impl Channel {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
+    mod screen_signaling;
     use super::*;
     use crate::remote::identity::Identity;
     use crate::store::Store;
@@ -858,6 +814,7 @@ mod tests {
         p.send(json!({"id": 3, "sub": "events", "b": {"since": hub.store.current_rev(), "client": "ios"}})).await;
         let hello = p.recv().await.unwrap();
         assert_eq!((hello["id"].as_u64(), hello["ev"]["type"].as_str()), (Some(3), Some("hello")));
+        assert_eq!(p.recv().await.unwrap()["ev"]["type"], "icons");
         assert!(hub.phone_connected());
 
         assert!(hub.revoke_device(&dk).unwrap());
@@ -952,6 +909,7 @@ mod tests {
         p.hello(&hub, false).await;
         p.send(json!({"id": 7, "sub": "events", "b": {"since": 0}})).await;
         assert_eq!(p.recv().await.unwrap()["ev"]["type"], "hello");
+        assert_eq!(p.recv().await.unwrap()["ev"]["type"], "icons");
         p.send(json!({"id": 7, "cancel": true})).await;
         assert_eq!(p.recv().await.unwrap(), json!({"id": 7, "end": true}));
         assert_eq!(p.call(8, "hello", json!({})).await["id"], 8, "the channel goes on");

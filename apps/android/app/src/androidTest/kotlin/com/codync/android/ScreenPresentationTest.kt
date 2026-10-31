@@ -71,15 +71,10 @@ class ScreenPresentationTest {
         compose.onNodeWithContentDescription("Save").assertDoesNotExist()
     }
 
-    @Test fun onlyABotsTouchAndHoldMenuStartsANewSession() {
-        val group = Bot("presentation-group", "Crew", kind = "group", members = listOf(bot.id))
-        compose.setContent { Hosted { CodyncApp(fixture().copy(bots = listOf(bot, group)), viewModel()) } }
-        compose.rosterAction(bot.name, "New session")
-        compose.onNodeWithText("Start a new session?").assertIsDisplayed()
-        compose.onNodeWithText("Cancel").performClick()
-        compose.onNodeWithText("Start a new session?").assertDoesNotExist()
-        compose.rosterActions(group.name)
-        compose.onNodeWithText("Edit group").assertIsDisplayed()
+    @Test fun aBotsTouchAndHoldMenuHasNoNewSession() {
+        compose.setContent { Hosted { CodyncApp(fixture(), viewModel()) } }
+        compose.rosterActions(bot.name)
+        compose.onNodeWithText("Edit profile").assertIsDisplayed()
         compose.onNodeWithText("New session").assertDoesNotExist()
     }
 

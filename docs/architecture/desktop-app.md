@@ -45,16 +45,24 @@ pointer), every section folds into its heading, the others make room as it passe
 they unfold on release (`BotRoster.tsx`). Click a heading to fold its bots.
 Order and folded sections stay on this device; the iPhone and other computers keep
 independent orders even when signed in to the same account. Filtering a computer out
-does not discard its position. One selected computer keeps a flat roster. Bots stay within
-their computer's section; drag a bot row or press Alt+Up/Down on the selected bot to reorder
+does not discard its position. One selected computer gets no heading. Inside each computer,
+the lead bot comes first, then pinned rows, then foldable section headers in device-local order, initially sorted by name (name,
+bot count, and the unread total while folded; folded state saved on this device), then rows in no
+section (under a "Bots" label when there are sections). A row's right-click menu has Move to
+section (not the lead's), a section header's has Rename section and Remove section (both only for
+a host at 2.32.0 or newer); a move or rename the host refuses is put back. Bots stay among their
+computer's bots (the lead stays on top, pinned bots move among all pinned bots, an unpinned bot
+also stays inside its section); drag a bot row or press Alt+Up/Down on the selected bot to reorder
 it ([bot order](../features/computer-order.md#bot-order), synced through the host), and
-arrow-key navigation skips folded sections.
+Up/Down navigation skips folded computers and sections.
 Search still includes their bots. The compact sidebar uses computer badges for the same
 section controls. Ordering is saved locally immediately and survives restart, with separate
 preferences per account and cloud environment. See [computer ordering](../features/computer-order.md).
 The TUI connects to one host at a time, so it keeps its single roster.
 
 ## Platform notes
+
+- **First-run computer access** uses a capsule with one permission per panel, the app icon above it, and directional transitions (disabled with Reduce Motion). GitHub Star is the optional final panel and shares its answer history with the later reminder. macOS has three permission panels; Linux combines capture and input; Windows only shows control availability. Settings and the menu-bar setup keep their permission overview. iOS, Android and the terminal UI continue to show remote permission status and direct people to this desktop setup; they cannot request these desktop OS grants.
 
 - **Local host recovery** uses the Codync character: looking around and bobbing while starting,
   resting for setup, and a still disappointed expression with lowered eyelids and a downturned mouth if the host is missing or
@@ -69,9 +77,13 @@ The TUI connects to one host at a time, so it keeps its single roster.
   filter distinguishes connecting, attention, disconnected and opening states and
   keeps local recovery actions reachable when a remote computer is already online.
   iOS uses direct/encrypted host connections, and the TUI connects to one host;
-  neither manages desktop SSH profiles. Windows exposes the same profile UI, but
-  the tunnel backend still uses `/usr/bin/ssh*` and Unix socket ownership checks;
-  Windows tunnel support has not been implemented.
+  neither manages desktop SSH profiles. Windows uses the native OpenSSH Client
+  in `%SystemRoot%\System32\OpenSSH` and checks the listener's owning process
+  through `Get-NetTCPConnection` before sending the host token. Install OpenSSH
+  Client in Windows Optional features if it is missing. Keys stay in the local
+  SSH agent or selected key file, including a public key that selects a 1Password
+  agent identity. Windows drive and UNC key paths are supported. Disconnect and
+  quit close the tunnel; startup removes leftover tunnels for this app variant.
 - **Icons**: SF Symbols may only ship in apps for Apple platforms, so the masks are generated
   on macOS at build time and never committed; Linux draws the closest Lucide icons.
 - **On-device speech** is macOS only; Linux calls use OpenAI or Gemini on the user's key.
@@ -86,8 +98,7 @@ The TUI connects to one host at a time, so it keeps its single roster.
   Agents start through `cmd /c` (`host/src/shell.rs`), setup terminals use ConPTY
   (`portable-pty`), and the vault key lives in Credential Manager. Not on Windows yet: Remote
   screen and the `computer` MCP (no screen helper), on-device speech, the Claude Code status
-  line hook (usage still comes from `claude -p /usage`, ACP and each agent's own report), SSH tunnels to other
-  computers, and `curl | bash` installers (npm installs and Claude Code's PowerShell installer
+  line hook (usage still comes from `claude -p /usage`, ACP and each agent's own report), and `curl | bash` installers (npm installs and Claude Code's PowerShell installer
   work). The tray icon is the app icon; left-click opens the chat, right-click the menu.
 - **Remote screen** on macOS registers `CodyncScreen.app` (built from the Xcode `Screen` target)
   as an SMAppService agent; Linux starts its helper from the host, as before.
@@ -115,11 +126,13 @@ child must own the listening socket and stay alive until disconnect. This keeps
 `ControlMaster` / `ControlPersist` in the user's config from transferring the
 forward to a shared master that outlives the app.
 
-For a read-only macOS integration check against an already trusted SSH computer,
+For a read-only integration check against an already trusted SSH computer,
 run `node --experimental-strip-types tools/ssh-e2e.mjs <ssh-alias>` from
 `apps/desktop`. It checks discovery, listener ownership, host identity, API
-authentication and sync, SSE, disconnect/reconnect, and an occupied local port.
+authentication, bot sync and history, SSE, disconnect/reconnect, and an occupied local port.
 It uses port 19222 on the remote computer and leaves bots and settings unchanged.
+An explicit user and identity file can follow the alias; Windows uses its native
+OpenSSH Client and listener ownership check, just like the app.
 
 ```sh
 cd apps/desktop
@@ -171,3 +184,7 @@ disabling security checks. Distributed builds still require Developer ID signing
 
 Composer keyboard behavior, animation and durable draft storage, with a host-free
 regression fixture: [composer checks](../guides/composer.md).
+
+Section headings and the unsectioned Bots group also drag up or down within their computer. Alt+Up/Down on a focused heading moves it one place. Dragging folds the groups temporarily; cancelling restores the order, and dropping saves it per computer on this device.
+
+Roster action submenus open beside their parent on hover, click, Enter or Right. They flip left near the window edge; a short hover delay keeps the path into the child stable. Left or Escape returns to the parent. This mouse-specific behavior is desktop-only: iPhone uses its native context menu, Android keeps touch submenus, and the terminal uses keyboard prompts.

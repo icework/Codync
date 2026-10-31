@@ -17,6 +17,7 @@ import type { CallLine } from '@shared/calls'
 import type { HostClient } from '../client/host-client'
 import { readSharedFile } from '../../shared/files.ts'
 import { FileDownloads } from './file-downloads'
+import { BotSections } from './bot-sections'
 import { BotSync, sleep } from './bot-sync'
 
 export { builtInBackendName, type Connection } from './bot-mirror'
@@ -49,6 +50,7 @@ export const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '👀', '✅']
  */
 export class BotStore extends BotSync {
   readonly fileDownloads = new FileDownloads(() => this.changed())
+  readonly sections = new BotSections(() => this.bots, () => this.changed(), (op, undo) => this.perform(op, true, undo))
 
   override retire() { this.fileDownloads.retire(); super.retire() }
 
@@ -158,10 +160,6 @@ export class BotStore extends BotSync {
 
   stop(botId: string) {
     this.perform((c) => c.call('stop', { botId }), true)
-  }
-
-  newSession(botId: string) {
-    this.perform((c) => c.call('newSession', { botId }))
   }
 
   /** Back to the bot's own agent from a fallback: now if it's idle, else from its next turn. The host posts the chat line. */
@@ -314,6 +312,17 @@ export class BotStore extends BotSync {
     this.patchBot(bot, { harnessMemory })
   }
 
+  /** Makes `bot` the lead, in place of the one before; a refusal gives the star back. */
+  setLead(bot: Bot) {
+    const before = [...this.bots.values()].find((b) => b.lead)?.id
+    const show = (lead: string | undefined) => {
+      for (const [id, b] of this.bots) this.bots.set(id, { ...b, lead: id === lead })
+      this.changed()
+    }
+    show(bot.id)
+    this.perform((c) => c.call('setLead', { botId: bot.id }), true, () => show(before))
+  }
+
   setHidden(bot: Bot, hidden: boolean) {
     this.patchBot(bot, { hidden })
   }
@@ -345,8 +354,7 @@ export class BotStore extends BotSync {
   async createGroup(name: string, description: string, members: string[]) {
     const draft: GroupDraft = { kind: 'group', name, description, members }
     const res = await (await this.ready()).call<{ bot: Bot }>('createBot', draft)
-    const bot = normalizeBot(res.bot)
-    this.bots.set(bot.id, bot)
+    const bot = this.putHostBot(normalizeBot(res.bot))
     this.selection = bot.id
     this.onRosterChanged?.()
     this.changed()
@@ -355,7 +363,7 @@ export class BotStore extends BotSync {
 
   async updateGroup(draft: GroupDraft) {
     const res = await (await this.ready()).call<{ bot: Bot }>('updateBot', draft)
-    this.bots.set(res.bot.id, normalizeBot(res.bot))
+    this.putHostBot(normalizeBot(res.bot))
     this.changed()
   }
 
@@ -393,8 +401,7 @@ export class BotStore extends BotSync {
     const res = draft.id
       ? await client.call<{ bot: Bot }>('updateBot', { ...draft, model: draft.model ?? null })
       : await client.call<{ bot: Bot }>('createBot', draft)
-    const bot = normalizeBot(res.bot)
-    this.bots.set(bot.id, bot)
+    const bot = this.putHostBot(normalizeBot(res.bot))
     this.onRosterChanged?.()
     this.changed()
     return bot
@@ -407,6 +414,10 @@ export class BotStore extends BotSync {
       this.hello = { ...this.hello, backends: res.backends }
       this.changed()
     } catch {}
+  }
+
+  async selectWorkspace(path: string) {
+    return (await this.ready()).call<{ path: string }>('selectWorkspace', { path })
   }
 
   async listDirs(path: string | null) {
@@ -434,20 +445,6 @@ export class BotStore extends BotSync {
 
   setSelection(id: string | null) {
     this.selection = id
-    this.changed()
-  }
-
-  consumeRoutineDraft(botId: string) {
-    const value = this.routineDrafts.get(botId)
-    if (value !== undefined) {
-      this.routineDrafts.delete(botId)
-      this.changed()
-    }
-    return value
-  }
-
-  setRoutineDraft(botId: string, text: string) {
-    this.routineDrafts.set(botId, text)
     this.changed()
   }
 }

@@ -57,6 +57,7 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
         }
         "hello" => {
             let port = hub.port;
+            let icons = crate::icons::snapshot(&hub.store)?;
             json!({
                 "hostId": hub.host_id,
                 "computerId": hub.identity.computer_id(),
@@ -74,6 +75,8 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
                 "device": tokio::task::spawn_blocking(crate::service::device).await?,
                 "home": dirs::home_dir().map(|p| p.to_string_lossy().into_owned()),
                 "backends": backends::list(),
+                "icons": icons.icons,
+                "iconsRevision": icons.icons_revision,
                 "rev": hub.store.current_rev(),
                 "screen": hub.screen.state(),
                 "analytics": hub.analytics.state(),
@@ -94,7 +97,13 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
         }
         "listDirs" => {
             let path = b["path"].as_str().map(std::path::PathBuf::from);
-            tokio::task::spawn_blocking(move || list_dirs(path)).await??
+            let hub = hub.clone();
+            tokio::task::spawn_blocking(move || super::folders::listing(&hub.store, path)).await??
+        }
+        "selectWorkspace" => {
+            let path = str_arg(&b, "path")?.to_owned();
+            let hub = hub.clone();
+            tokio::task::spawn_blocking(move || super::folders::select(&hub.store, &path)).await??
         }
         "agentSetup" => {
             let step: crate::agent::term::Step =
@@ -147,7 +156,7 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
             } else {
                 crate::screen::IceConfig::default()
             };
-            let result = hub.screen.prepare(caller.device_key(), ice)?;
+            let result = hub.screen.prepare(caller.device_key(), ice, b["trickle"].as_bool().unwrap_or(false))?;
             let session = result["session"].as_str().context("missing screen session")?.to_owned();
             tokio::spawn(crate::screen::watch_viewer(hub.clone(), session, caller.device_key().to_owned()));
             result
@@ -155,6 +164,11 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
         "screenOffer" => {
             let display = b["display"].as_u64().and_then(|d| u32::try_from(d).ok());
             hub.screen.offer(caller.device_key(), str_arg(&b, "sdp")?, str_arg(&b, "session")?, display).await?
+        }
+        "screenCandidate" => {
+            let candidate = serde_json::from_value(b["candidate"].clone())?;
+            hub.screen.candidate(str_arg(&b, "session")?, caller.device_key(), candidate).await?;
+            json!({})
         }
         "screenClose" => {
             let session = str_arg(&b, "session")?;
@@ -189,34 +203,6 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
             crate::screen::computer(hub, str_arg(&b, "botId")?, str_arg(&b, "name")?, args).await?
         }
         _ => return Ok(ControlFlow::Continue(b)),
-    }))
-}
-
-/// Blocking (`std::fs`): call through `spawn_blocking`.
-fn list_dirs(path: Option<std::path::PathBuf>) -> Result<Value> {
-    let dir = match path {
-        Some(p) => p,
-        None => dirs::home_dir().ok_or_else(|| anyhow!("no home directory"))?,
-    };
-    let mut dirs: Vec<Value> = std::fs::read_dir(&dir)
-        .with_context(|| format!("listing {}", dir.display()))?
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-        .filter_map(|e| {
-            let name = e.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
-                return None;
-            }
-            let p = e.path();
-            Some(json!({"name": name, "path": p.to_string_lossy(), "isGit": p.join(".git").exists()}))
-        })
-        .collect();
-    dirs.sort_by_key(|d| d["name"].as_str().unwrap_or_default().to_lowercase());
-    Ok(json!({
-        "path": dir.to_string_lossy(),
-        "parent": dir.parent().map(|p| p.to_string_lossy().into_owned()),
-        "isGit": dir.join(".git").exists(),
-        "dirs": dirs,
     }))
 }
 

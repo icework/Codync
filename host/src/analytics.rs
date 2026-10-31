@@ -22,7 +22,7 @@ mod session;
 mod turns;
 
 pub use lifecycle::{KV_STARTED, Via, device_paired, host_started, phone_connected};
-pub use observe::{answered, observe_call};
+pub use observe::{answered, failed, observe_call};
 pub use reported::track;
 pub use turns::{TurnOutcome, TurnSource, agent_fell_back, turn_finished};
 
@@ -61,6 +61,7 @@ pub enum Event {
     BotCreated,
     BotUpdated,
     BotsReordered,
+    SectionRenamed,
     BotDeleted,
     MessageSent,
     TurnStopped,
@@ -99,6 +100,8 @@ pub enum Event {
     /// `networkCreate` or `networkJoin`: this computer is in a network of the user's computers.
     NetworkJoined,
     NetworkChanged,
+    /// A network step failed (`NetworkStage`): starting a node, a letter, or a `network*` call.
+    NetworkFailed,
     /// Error tracking (`errors`): a panic or an uncaught error.
     Exception,
 }
@@ -126,6 +129,7 @@ impl Event {
             Self::BotCreated => "bot_created",
             Self::BotUpdated => "bot_updated",
             Self::BotsReordered => "bots_reordered",
+            Self::SectionRenamed => "section_renamed",
             Self::BotDeleted => "bot_deleted",
             Self::MessageSent => "message_sent",
             Self::TurnStopped => "turn_stopped",
@@ -160,9 +164,35 @@ impl Event {
             Self::HostUpdateInstalled => "host_update_installed",
             Self::NetworkJoined => "network_joined",
             Self::NetworkChanged => "network_changed",
+            Self::NetworkFailed => "network_failed",
             Self::Exception => "$exception",
         }
     }
+}
+
+/// Where a network of the user's computers failed (`network_failed`'s `stage`); a failed
+/// `network*` call is `action` (`observe::failed`).
+#[derive(Clone, Copy, Debug)]
+pub enum NetworkStage {
+    /// A saved network's node didn't start with the host.
+    Start,
+    /// A bot's letter to another computer didn't go (refused, or no such computer).
+    Send,
+    /// The outcome of another computer's request didn't go back.
+    Reply,
+    /// A letter from another computer couldn't be taken in.
+    Receive,
+}
+
+/// Reports a network step that failed; never the error's text, a name or an address.
+pub fn network_failed(hub: &Hub, stage: NetworkStage) {
+    let stage = match stage {
+        NetworkStage::Start => "start",
+        NetworkStage::Send => "send",
+        NetworkStage::Reply => "reply",
+        NetworkStage::Receive => "receive",
+    };
+    capture(hub, Event::NetworkFailed, Map::from_iter([("stage".into(), stage.into())]));
 }
 
 pub struct Analytics {

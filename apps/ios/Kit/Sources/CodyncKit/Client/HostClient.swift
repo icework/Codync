@@ -1,6 +1,7 @@
 import Foundation
 
 public enum HostEvent: Sendable {
+    case icons([String: CustomIcon], revision: Int64)
     /// The stream's first event; `network` is nil from hosts before the network view.
     case hello(hostId: String, rev: Int64, usage: Usage, screen: ScreenState?, network: NetworkView?)
     case bot(Bot)
@@ -108,6 +109,9 @@ public struct HostClient: Sendable {
         let d = decoder
         guard let env = try? d.decode(Envelope.self, from: data) else { return nil }
         switch env.type {
+        case "icons":
+            struct Icons: Decodable { var icons: [String: CustomIcon]; var iconsRevision: Int64? }
+            return (try? d.decode(Icons.self, from: data)).map { .icons($0.icons, revision: $0.iconsRevision ?? 0) }
         case "hello":
             let usage = (try? d.decode(UsageWrap.self, from: data))?.usage ?? Usage()
             let screen = (try? d.decode(ScreenWrap.self, from: data))?.screen
@@ -199,6 +203,12 @@ public extension HostClient {
         return res.bot
     }
 
+    /// Puts the bot in `section`, or takes it out of its own (nil, sent as null); nothing else changes.
+    func setSection(_ botId: String, to section: String?) async throws {
+        let body: [String: String?] = ["id": botId, "section": section]
+        let _: Empty = try await call("updateBot", body)
+    }
+
     func deleteBot(_ id: String) async throws {
         let _: Empty = try await call("deleteBot", ["botId": id])
     }
@@ -206,6 +216,13 @@ public extension HostClient {
     /// The roster as the user dragged it, top first.
     func reorderBots(_ ids: [String]) async throws {
         let _: Empty = try await call("reorderBots", ["ids": ids])
+    }
+
+    /// Moves every bot of the computer in section `from` to `to` (a name already in use merges the
+    /// two); nil removes the section, its bots staying without one.
+    func renameSection(from: String, to: String?) async throws {
+        let body: [String: String?] = ["from": from, "to": to]
+        let _: Empty = try await call("renameSection", body)
     }
 
     /// The chat read; a no-op when nothing there is unread.
@@ -265,6 +282,11 @@ public extension HostClient {
         return out
     }
 
+    /// The user makes this bot the lead, in place of the one before.
+    func setLead(_ botId: String) async throws {
+        let _: Empty = try await self.call("setLead", ["botId": botId])
+    }
+
     /// A call's audio is live: a lead opens it, and its opening is the call's.
     func callStarted(_ botId: String, call: String) async throws {
         let _: Empty = try await self.call("callStarted", ["botId": botId, "callId": call])
@@ -315,10 +337,6 @@ public extension HostClient {
         let _: Empty = try await call("stop", ["botId": botId])
     }
 
-    func newSession(_ botId: String) async throws {
-        let _: Empty = try await call("newSession", ["botId": botId])
-    }
-
     func respondPermission(entryId: String, optionId: String?) async throws {
         struct Body: Encodable { var entryId: String; var optionId: String? }
         let _: Empty = try await call("respondPermission", Body(entryId: entryId, optionId: optionId))
@@ -343,6 +361,12 @@ public extension HostClient {
         try await call("usage", ["refresh": refresh])
     }
 
+    func selectWorkspace(_ path: String) async throws -> String {
+        struct Reply: Decodable { var path: String }
+        let reply: Reply = try await call("selectWorkspace", ["path": path])
+        return reply.path
+    }
+
     func listDirs(_ path: String?) async throws -> DirListing {
         struct Body: Encodable { var path: String? }
         return try await call("listDirs", Body(path: path))
@@ -354,11 +378,11 @@ public extension HostClient {
 
     func screenPrepare() async throws -> ScreenConnection {
         let relay = if let channel = transport as? ChannelTransport { try await channel.screenRelayRequired() } else { false }
-        return try await call("screenPrepare", ["relay": relay])
+        return try await call("screenPrepare", ["relay": relay, "trickle": true])
     }
 
-    /// Sends a WebRTC offer (with all its ICE candidates); returns the session id and the answer.
-    /// Passing `session` restarts ICE on an existing session.
+    /// Sends the offer using the prepared session’s negotiated ICE mode.
+    /// Trickle negotiations use a fresh session for every connection attempt.
     func screenOffer(sdp: String, session: String?, display: UInt32?) async throws -> ScreenAnswer {
         struct Body: Encodable { var sdp: String; var session: String?; var display: UInt32? }
         return try await call("screenOffer", Body(sdp: sdp, session: session, display: display), timeout: 30)

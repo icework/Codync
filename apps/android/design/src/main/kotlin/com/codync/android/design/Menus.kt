@@ -79,8 +79,14 @@ class MenuItem(
     val divider: Boolean = false,
     val enabled: Boolean = true,
     val children: List<MenuItem>? = null,
+    /** Shows [title] as it is, never translated: a name the user gave (a section's). */
+    val verbatim: Boolean = false,
+    val detail: String? = null,
     val action: () -> Unit = {},
-)
+) {
+    /** [title] as the row shows it: through [translate], unless [verbatim]. */
+    fun shownTitle(translate: (String) -> String): String = if (verbatim) title else translate(title)
+}
 
 /** A row of emoji above a message's menu (Slack's quick reactions). */
 class ReactionPick(val emoji: List<String>, val chosen: List<String>, val toggle: (String) -> Unit)
@@ -98,7 +104,7 @@ class ReactionPick(val emoji: List<String>, val chosen: List<String>, val toggle
 }
 
 /** Long-press then move: the row leaves its menu and follows the finger, as iOS list rows reorder. */
-class ContextDrag(val start: () -> Unit, val move: (Float) -> Unit, val end: () -> Unit)
+class ContextDrag(val start: () -> Unit, val move: (Float) -> Unit, val end: () -> Unit, val cancel: (() -> Unit)? = null)
 
 /**
  * Long-press opens the menu under a lifted copy of the content; `reactions` adds the emoji row.
@@ -134,13 +140,18 @@ class ContextDrag(val start: () -> Unit, val move: (Float) -> Unit, val end: () 
             hold()
             var moved = 0f
             var started = false
-            drag(held.id) { change ->
-                val step = change.positionChange().y
-                moved += step
-                if (!started && abs(moved) > viewConfiguration.touchSlop) { started = true; open = false; reorder.start() }
-                if (started) { reorder.move(step); change.consume() }
+            // finally: a cancelled gesture (the row left the list, the handler restarted) still ends the drag.
+            var completed = false
+            try {
+                completed = drag(held.id) { change ->
+                    val step = change.positionChange().y
+                    moved += step
+                    if (!started && abs(moved) > viewConfiguration.touchSlop) { started = true; open = false; reorder.start() }
+                    if (started) { reorder.move(step); change.consume() }
+                }
+            } finally {
+                if (started) { if (completed) reorder.end() else (reorder.cancel ?: reorder.end)() }
             }
-            if (started) reorder.end()
         }
     }
     return onGloballyPositioned { anchor = it.boundsInRoot() }.then(gestures)
@@ -243,6 +254,7 @@ private val MenuShape = RoundedRectangle(26.dp)
         .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(13.dp)) {
         val leading = when {
+            item.icon != null -> item.icon
             item.selected == true -> "checkmark"
             item.selected == false -> null
             else -> item.icon
@@ -250,7 +262,11 @@ private val MenuShape = RoundedRectangle(26.dp)
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
             if (leading != null) Symbol(leading, size = 21.dp, tint = ink)
         }
-        Text(tr(item.title), Modifier.weight(1f), style = if (bold) Type.body.semibold else Type.body, color = ink)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(item.shownTitle(translator()), style = if (bold) Type.body.semibold else Type.body, color = ink)
+            item.detail?.let { Text(tr(it), style = Type.caption, color = Palette.secondary) }
+        }
+        if (item.icon != null && item.selected == true) Symbol("checkmark", size = 16.dp, tint = ink)
         if (item.children != null) Symbol("chevron.right", size = 16.dp, tint = Palette.secondary)
     }
 }

@@ -6,7 +6,8 @@ import { BotAvatar } from '../../components/Avatar'
 import { Icon } from '../../components/Icon'
 import { IconButton } from '../../components/Controls'
 import { RecordingPill } from '../../components/RecordingPill'
-import { usePresence } from '../../components/Overlay'
+import { Sheet, usePresence } from '../../components/Overlay'
+import { VoiceChatSettingsView } from '../settings/VoiceChatSettingsView'
 import { HStack, VStack } from '../../components/Stack'
 import { Text } from '../../components/Text'
 import { useModel } from '../../lib/observable'
@@ -59,7 +60,8 @@ function DestinationComposer({ botId, reply, about, cancelReply, onCall, onInter
   const draft = useSyncExternalStore(drafts.subscribe, () => drafts.get(draftKey))
   const setDraft = (text: string) => drafts.set(draftKey, text)
   const [files, setFiles] = useState<OutgoingFile[]>([])
-  const dictation = useDictation((change) => drafts.set(draftKey, change(drafts.get(draftKey))))
+  const [voiceSettings, setVoiceSettings] = useState(false)
+  const dictation = useDictation((change) => drafts.set(draftKey, change(drafts.get(draftKey))), () => setVoiceSettings(true))
   const field = useRef<HTMLTextAreaElement>(null)
   const measure = useRef<HTMLDivElement>(null)
   const composing = useRef(false)
@@ -82,17 +84,6 @@ function DestinationComposer({ botId, reply, about, cancelReply, onCall, onInter
       : working
         ? tr('Queue a message for {name}').replace('{name}', name)
         : tr('Ask {name}').replace('{name}', name)
-
-  // A routine's "Try it" fills the chat's box (an artifact's leaves it for the chat).
-  const routineDraft = about ? undefined : store.routineDrafts.get(botId)
-  useEffect(() => {
-    if (routineDraft === undefined) return
-    const incoming = store.consumeRoutineDraft(botId)
-    if (incoming === undefined) return
-    const previous = drafts.get(botId)
-    drafts.set(botId, previous ? `${previous}\n${incoming}` : incoming)
-    field.current?.focus()
-  }, [routineDraft, botId, store, drafts])
 
   // Picking a message to reply to brings the caret here.
   useEffect(() => {
@@ -329,6 +320,9 @@ function DestinationComposer({ botId, reply, about, cancelReply, onCall, onInter
           </div>
         </div>
       </div>
+      <Sheet open={voiceSettings} onClose={() => setVoiceSettings(false)}>
+        <VoiceChatSettingsView />
+      </Sheet>
     </VStack>
   )
 }

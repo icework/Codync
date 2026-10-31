@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import os
 
 /// Values shared between the app, its widgets and its notification extension through the App Group,
 /// one namespace per account context so a signed-out account's data never shows in another.
@@ -32,7 +33,7 @@ public enum SharedStore {
             self.suite = suite
         }
 
-        private static let names = ["computers", "bots", "usage", "lastComputerId", "composerDrafts", "computerOrder"]
+        private static let names = ["computers", "bots", "usage", "lastComputerId", "composerDrafts", "computerOrder", "shortcutLeadComputer"]
         private func key(_ name: String) -> String { accountID == nil ? name : "account.\(id).\(name)" }
         public static func digest(_ value: String) -> String {
             SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
@@ -67,6 +68,12 @@ public enum SharedStore {
         public var composerDrafts: [ComputerID: [String: String]] {
             get { read([ComputerID: [String: String]].self, "composerDrafts") ?? [:] }
             nonmutating set { write(newValue, "composerDrafts") }
+        }
+
+        /// The computer whose lead a shortcut that names no bot calls (Settings); nil: the first computer with one.
+        public var shortcutLeadComputer: ComputerID? {
+            get { defaults.string(forKey: key("shortcutLeadComputer")) }
+            nonmutating set { defaults.set(newValue, forKey: key("shortcutLeadComputer")) }
         }
 
         /// The most recently active computer; the Usage widget shows only this one.
@@ -105,6 +112,8 @@ public enum SharedStore {
         public func erase() {
             for name in Self.names { defaults.removeObject(forKey: key(name)) }
             DeviceIdentity.delete(context: self)
+            do { try ActivityIconCache.erase(context: id) }
+            catch { Logger(subsystem: "com.pokai.Codync", category: "CustomIcon").error("Cannot erase activity icons: \(error.localizedDescription)") }
             let caches = URL.cachesDirectory
             let marker = "-\(id)-"
             for file in (try? FileManager.default.contentsOfDirectory(atPath: caches.path())) ?? []

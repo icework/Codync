@@ -78,12 +78,14 @@ class ClerkError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message)
   }
 }
 
 export class AccountService extends EventEmitter {
+  private signInAttempt = 0
   private config = loadConfig()
   private base = this.config.clerkPublishableKey ? frontendAPI(this.config.clerkPublishableKey) : null
   private deviceToken: string | null = null
@@ -155,7 +157,7 @@ export class AccountService extends EventEmitter {
     } catch {}
   }
 
-  private async request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: Record<string, string | boolean>, query?: Record<string, string>): Promise<T> {
+  private async request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: Record<string, string | boolean>, query?: Record<string, string>, accept?: (response: T) => boolean): Promise<T> {
     if (!this.base) throw new ClerkError(0, "Sign-in isn't configured in this build.")
     const url = new URL(`${this.base}${path}`)
     url.searchParams.set('_is_native', 'true')
@@ -168,16 +170,21 @@ export class AccountService extends EventEmitter {
       payload = new URLSearchParams(Object.entries(body).map(([k, v]) => [k, String(v)])).toString()
     }
     const res = await fetch(url, { method, headers, body: payload, signal: AbortSignal.timeout(20_000) })
-    // A new device token comes back in `Authorization`; "Bearer" alone clears it.
-    const auth = res.headers.get('authorization')?.trim()
-    if (auth !== undefined) {
-      this.deviceToken = !auth || auth.toLowerCase() === 'bearer' ? null : auth
-      void this.persist()
+    const json = (await res.json().catch(() => ({}))) as { response?: T; client?: ClerkClient | null; errors?: { code?: string; long_message?: string; message?: string }[] } & T
+    const response = json.response ?? json
+    const accepted = res.ok && (!accept || accept(response))
+    // Keep normal token rotation (including sign-out responses), but a rejected browser nonce
+    // must not replace this attempt's client/token.
+    if (accepted || !accept) {
+      const auth = res.headers.get('authorization')?.trim()
+      if (auth !== undefined) {
+        this.deviceToken = !auth || auth.toLowerCase() === 'bearer' ? null : auth
+        void this.persist()
+      }
     }
-    const json = (await res.json().catch(() => ({}))) as { response?: T; client?: ClerkClient | null; errors?: { long_message?: string; message?: string }[] } & T
-    if (!res.ok) throw new ClerkError(res.status, json.errors?.[0]?.long_message ?? json.errors?.[0]?.message ?? `Clerk error ${res.status}`)
-    if ('client' in json) this.applyClient(json.client ?? null)
-    return (json.response ?? json) as T
+    if (!res.ok) throw new ClerkError(res.status, json.errors?.[0]?.long_message ?? json.errors?.[0]?.message ?? `Clerk error ${res.status}`, json.errors?.[0]?.code)
+    if (accepted && 'client' in json) this.applyClient(json.client ?? null)
+    return response
   }
 
   private applyClient(client: ClerkClient | null) {
@@ -200,6 +207,38 @@ export class AccountService extends EventEmitter {
     this.applyClient(client)
   }
 
+  /** Only a callback verified against this sign-in may finish its browser wait. */
+  private async browserSignIn(id: string, redirect: string, attempt: number) {
+    let verified: SignInResource | null = null
+    const accept = async (url: string, isCurrent: () => boolean) => {
+      if (attempt !== this.signInAttempt) return false
+      this.set({ busy: true })
+      try {
+        const nonce = new URL(url).searchParams.get('rotating_token_nonce')
+        const matches = (value: SignInResource) => isCurrent() && attempt === this.signInAttempt && (value.status === 'complete'
+          || value.status === 'needs_second_factor'
+          || [value.first_factor_verification, value.second_factor_verification].some((factor) => factor?.status === 'transferable' || factor?.error))
+        const value = await this.request<SignInResource>('GET', `/v1/client/sign_ins/${id}`, undefined,
+          nonce ? { rotating_token_nonce: nonce } : undefined, matches)
+        if (!matches(value)) return false
+        verified = value
+        return true
+      } catch (error) {
+        // Clerk rejects a nonce from a different/expired browser flow without consuming ours.
+        if (error instanceof ClerkError && error.code === 'signed_out') return false
+        throw error
+      } finally {
+        if (attempt === this.signInAttempt && !verified) this.set({ busy: false })
+      }
+    }
+    // Closing the browser does not leave the app loading; another sign-in can replace it.
+    const authentication = authenticate(redirect, SCHEME, accept)
+    this.set({ busy: false })
+    const callback = new URL(await authentication)
+    if (attempt !== this.signInAttempt || !verified) return null
+    return { callback, signIn: verified as SignInResource }
+  }
+
   /** Why it ended without an account (`sign_in_failed`); null once signed in. */
   async signIn(provider: SignInProvider): Promise<SignInFailure | null> {
     if (this.state.busy) return null
@@ -207,6 +246,7 @@ export class AccountService extends EventEmitter {
       this.set({ error: "Sign-in setup isn't finished yet. You can continue using local pairing." })
       return 'error'
     }
+    const attempt = ++this.signInAttempt
     const name = provider === 'apple' ? 'Apple' : 'Google'
     let failure: SignInFailure | null = null
     this.set({ busy: true, error: null })
@@ -216,9 +256,10 @@ export class AccountService extends EventEmitter {
       const prepared = await this.request<SignInResource>('POST', `/v1/client/sign_ins/${created.id}/prepare_first_factor`, { strategy, redirect_url: REDIRECT })
       const redirect = prepared.first_factor_verification?.external_verification_redirect_url
       if (!redirect) throw new ClerkError(0, 'Redirect URL is missing. Unable to start the sign-in.')
-      const callback = new URL(await authenticate(redirect, SCHEME))
+      const authenticated = await this.browserSignIn(created.id, redirect, attempt)
+      if (!authenticated) return 'cancelled'
+      const { callback, signIn } = authenticated
       const nonce = callback.searchParams.get('rotating_token_nonce')
-      const signIn = await this.request<SignInResource>('GET', `/v1/client/sign_ins/${created.id}`, undefined, nonce ? { rotating_token_nonce: nonce } : undefined)
       const transferable = signIn.first_factor_verification?.status === 'transferable' || signIn.second_factor_verification?.status === 'transferable'
       if (!nonce && transferable) {
         // A new account: Clerk's transfer flow turns the sign-in into a sign-up.
@@ -235,13 +276,14 @@ export class AccountService extends EventEmitter {
       }
       await this.refreshClient()
     } catch (error) {
+      if (attempt !== this.signInAttempt) return 'cancelled'
       if (error instanceof AuthenticationEnded) failure = error.reason
       else {
         failure = 'error'
         this.set({ error: "Couldn't sign in. Check your connection and try again." })
       }
     } finally {
-      this.set({ busy: false })
+      if (attempt === this.signInAttempt) this.set({ busy: false })
     }
     return failure
   }

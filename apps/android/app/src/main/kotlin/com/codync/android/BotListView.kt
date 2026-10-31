@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -58,11 +60,39 @@ import kotlinx.serialization.json.putJsonArray
 @Composable internal fun BotListView(state: AppState, store: AppStore, account: () -> Unit, manage: () -> Unit,
     newBot: () -> Unit, newGroup: () -> Unit, edit: (Bot) -> Unit, bottomInset: androidx.compose.ui.unit.Dp) {
     var confirmDelete by remember { mutableStateOf<Bot?>(null) }
-    var confirmNewSession by remember { mutableStateOf<Bot?>(null) }
+    var naming by remember { mutableStateOf<SectionNaming?>(null) }
+    val context = LocalContext.current
+    var folded by remember { mutableStateOf(FoldedSections.load(context)) }
+    val sectionKey = SectionOrders.key(state.contextId, state.computers.firstOrNull()?.id.orEmpty())
+    val listState = rememberLazyListState()
+    var sectionOrder by remember(sectionKey) { mutableStateOf(SectionOrders.load(context, sectionKey)) }
+    val sectionReorder = remember(sectionKey) { SectionReorder() }
+    sectionReorder.save = { sectionOrder = it; sectionReorder.names = it; SectionOrders.save(context, sectionKey, it) }
+    sectionReorder.position = { name ->
+        val key = if (name.isEmpty()) "label:bots" else "section:$name"
+        listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }?.offset?.toFloat() ?: 0f
+    }
+    // A folded section renamed or removed here stays folded under its new name, at once, like its bots; a refusal puts the
+    // folds back, reading and writing the stored ones, as the list may have left the screen.
+    val renameSection = { from: String, to: String? ->
+        val orderBefore = sectionOrder
+        val orderAfter = renamedSectionOrder(sectionReorder.names, from, to)
+        sectionReorder.save(orderAfter)
+        val before = folded
+        val renamed = foldsAfterRename(before, from, to)
+        folded = renamed
+        FoldedSections.save(context, renamed)
+        store.renameSection(from, to) {
+            if (SectionOrders.load(context, sectionKey) == orderAfter) sectionReorder.save(orderBefore)
+            folded = foldsAfterRefusal(FoldedSections.load(context), renamed, before).also { FoldedSections.save(context, it) }
+        }
+    }
     val roster = roster(state.bots)
+    val sectionNames = sectionNames(roster.filterNot { it.pinned })
+    sectionReorder.names = orderedSections(sectionNames + if (roster.any { !it.pinned && it.section == null }) listOf("") else emptyList(), sectionOrder)
+    val sections = menuSections(state.bots)
     val reorder = remember { RosterReorder() }
-    reorder.roster = roster.map(Bot::id)
-    reorder.lead = roster.firstOrNull { it.lead }?.id
+    reorder.roster = roster
     val online = state.actualConnection is LinkState.Ready
     // A computer that turned this phone away, or this computer's older identity, counts as none (iOS `availableStores`).
     val usable = state.computers.isNotEmpty() && !state.isStale
@@ -78,28 +108,42 @@ import kotlinx.serialization.json.putJsonArray
     }) {
         // Pull to refresh reconnects and asks the account for its computers again (iOS `refreshable`).
         PullToRefresh({ store.reconnect(); store.refreshComputers() }, Modifier.fillMaxSize(), indicatorTop = top + 50.dp) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top + 56.dp, bottom = bottomInset)) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top + 56.dp, bottom = bottomInset)) {
             // A computer waiting for an update has its card instead; its bots may not be readable yet.
             state.mismatch?.let { mismatch -> item("update") { UpdateNeededCard(state, mismatch, store::requestHostUpdate, Modifier.padding(vertical = 8.dp)) } }
             if (roster.isEmpty() && state.mismatch == null) item {
                 EmptyRoster(canCreate = usable, hasComputer = usable, create = newBot, showComputers = manage)
             }
-            items(reorder.shown(roster), key = Bot::id) { bot ->
-                val lifted = reorder.dragged == bot.id
-                Box(Modifier.onSizeChanged { reorder.heights[bot.id] = it.height }
-                    .then(if (lifted) Modifier.zIndex(1f).graphicsLayer { translationY = reorder.offset; scaleX = 1.02f; scaleY = 1.02f }
-                        else Modifier.animateItem())) {
-                    BotRowItem(bot, state, store, reorder.handle(bot.id) { store.reorder(it) }, edit = { edit(bot) },
-                        newSession = { confirmNewSession = bot }, delete = { confirmDelete = bot })
+            items(rosterLines(reorder.shown(roster), folded, sectionReorder.shown, sectionReorder.dragged != null), key = RosterLine::key) { line ->
+                when (line) {
+                    // Folding drops the section's rows from the list; animateItem fades them out and slides the rest up.
+                    is RosterLine.Header -> SectionHeader(line, toggle = {
+                        folded = if (line.name in folded) folded - line.name else folded + line.name
+                        FoldedSections.save(context, folded)
+                    }, actions = if (state.supportsSections) sectionActions(
+                        rename = { naming = SectionNaming("Rename section", line.name) { renameSection(line.name, it) } },
+                        remove = { renameSection(line.name, null) }) else emptyList(),
+                        modifier = Modifier.onSizeChanged { sectionReorder.heights[line.name] = it.height }
+                            .then(if (sectionReorder.dragged == line.name) Modifier.zIndex(1f).graphicsLayer { translationY = sectionReorder.translation(line.name) } else Modifier.animateItem()),
+                        drag = sectionReorder.handle(line.name),
+                        move = { sectionReorder.move(line.name, it) })
+                    RosterLine.Label -> SectionLabel(Modifier.onSizeChanged { sectionReorder.heights[""] = it.height }
+                        .then(if (sectionReorder.dragged == "") Modifier.zIndex(1f).graphicsLayer { translationY = sectionReorder.translation("") } else Modifier.animateItem()), sectionReorder.handle("")) { sectionReorder.move("", it) }
+                    is RosterLine.Row -> {
+                        val bot = line.bot
+                        val lifted = reorder.dragged == bot.id
+                        Box(Modifier.onSizeChanged { reorder.heights[bot.id] = it.height }
+                            .then(if (lifted) Modifier.zIndex(1f).graphicsLayer { translationY = reorder.offset; scaleX = 1.02f; scaleY = 1.02f }
+                                else Modifier.animateItem())) {
+                            BotRowItem(bot, state, store, reorder.handle(bot.id) { store.reorder(it) }, sections, edit = { edit(bot) },
+                                delete = { confirmDelete = bot },
+                                newSection = { naming = SectionNaming("New section", "") { store.setSection(bot.id, it) } })
+                        }
+                    }
                 }
             }
         }
         }
-    }
-    val restarting = confirmNewSession
-    CodyncDialog("Start a new session?", restarting != null, { confirmNewSession = null },
-        message = "The conversation stays here, but the agent starts with a fresh context.") {
-        listOf(DialogAction("New session") { restarting?.let { store.command("newSession", body("botId" to it.id)) } })
     }
     val deleting = confirmDelete
     CodyncDialog("Delete ${deleting?.name ?: "bot"}?", deleting != null, { confirmDelete = null },
@@ -108,6 +152,7 @@ import kotlinx.serialization.json.putJsonArray
             deleting?.let { store.deleteBot(it) {} }
         })
     }
+    SectionNameDialog(naming) { naming = null }
 }
 
 /**
@@ -115,76 +160,84 @@ import kotlinx.serialization.json.putJsonArray
  * shown follows the finger until the host's synced order catches up.
  */
 private class RosterReorder {
-    var roster: List<String> = emptyList()
-    /** Stays on top: nothing takes its place. */
-    var lead: String? = null
+    var roster: List<Bot> = emptyList()
     var order by mutableStateOf<List<String>?>(null)
     var dragged by mutableStateOf<String?>(null)
     var offset by mutableFloatStateOf(0f)
     val heights = mutableMapOf<String, Int>()
     private val handles = mutableMapOf<String, ContextDrag>()
+    private val synced: List<String> get() = roster.map(Bot::id)
 
     fun shown(bots: List<Bot>): List<Bot> {
         val ids = order ?: return bots
         // Dropped and synced: the host's order is the one to show again.
-        if (dragged == null && ids == roster) { order = null; return bots }
+        if (dragged == null && ids == synced) { order = null; return bots }
         return ids.mapNotNull { id -> bots.firstOrNull { it.id == id } } + bots.filter { it.id !in ids }
     }
 
     fun handle(id: String, save: (List<String>) -> Unit): ContextDrag = handles.getOrPut(id) {
-        ContextDrag(start = { order = order ?: roster; dragged = id; offset = 0f }, move = { step -> offset += step; swap(id) }, end = {
+        ContextDrag(start = { order = order ?: synced; dragged = id; offset = 0f }, move = { step -> offset += step; swap(id) }, end = {
             val dropped = order
             dragged = null; offset = 0f
-            if (dropped != null && dropped != roster) save(dropped) else order = null
+            if (dropped != null && dropped != synced) save(dropped) else order = null
         })
     }
 
-    /** Past half the neighbor's height, the row takes the neighbor's place. */
+    /** Past half its height, the row takes the place of the next bot it may pass ([moved]): headers and other sections stay put. */
     private fun swap(id: String) {
-        val list = order ?: return
-        val at = list.indexOf(id)
-        val next = if (offset > 0) at + 1 else at - 1
-        if (list.getOrNull(next) == lead) return
-        val height = list.getOrNull(next)?.let(heights::get) ?: return
+        val bots = shown(roster)
+        val direction = if (offset > 0) 1 else -1
+        val swapped = moved(bots, id, direction) ?: return
+        val height = heights[swapped[bots.indexOfFirst { it.id == id }]] ?: return
         if (kotlin.math.abs(offset) < height / 2f) return
-        order = list.toMutableList().apply { add(next, removeAt(at)) }
-        offset -= if (offset > 0) height else -height
+        order = swapped
+        offset -= direction * height
     }
 }
 
-/** Roster order: the lead, then pinned bots, then where the user dragged them, then most recent activity. */
+/** Roster order: pinned bots, then where the user dragged them, then most recent activity. */
 internal fun roster(bots: List<Bot>): List<Bot> = bots.filter { !it.deleted && !it.hidden }
     .sortedWith(compareBy<Bot> { it.band }.thenBy { it.position }.thenByDescending { it.lastAt })
 
-/** The roster order with a bot one place up (-1) or down (+1) within its band (`Bot.band`), or null when it can't move. */
+/**
+ * The roster order with a bot swapped with the next bot up (-1) or down (+1) that shows beside it, or null when there's none:
+ * a bot stays in its band (`Bot.band`: pinned bots, the rest); pinned bots move among all the pinned, the others
+ * among bots of their section (or of none), skipping the bots between.
+ */
 internal fun moved(roster: List<Bot>, id: String, offset: Int): List<String>? {
     val at = roster.indexOfFirst { it.id == id }
-    val neighbor = roster.getOrNull(at + offset)
-    if (at < 0 || neighbor == null || neighbor.band != roster[at].band) return null
-    return roster.map(Bot::id).toMutableList().apply { this[at] = neighbor.id; this[at + offset] = id }
+    if (at < 0) return null
+    val next = generateSequence(at + offset) { it + offset }.takeWhile { it in roster.indices }
+        .firstOrNull { roster[it].movesWith(roster[at]) } ?: return null
+    return roster.map(Bot::id).toMutableList().apply { this[at] = roster[next].id; this[next] = id }
 }
 
-@Composable private fun BotRowItem(bot: Bot, state: AppState, store: AppStore, drag: ContextDrag, edit: () -> Unit, newSession: () -> Unit,
-    delete: () -> Unit) {
-    // The lead stays on top and in the list: no drag, pin, hide or delete.
-    Box(Modifier.fillMaxWidth().contextActions(onClick = { store.openBot(bot.id) }, reorder = drag.takeUnless { bot.lead }, preview = {
+private fun Bot.movesWith(other: Bot) = band == other.band && (pinned || section == other.section)
+
+@Composable private fun BotRowItem(bot: Bot, state: AppState, store: AppStore, drag: ContextDrag, sections: List<String>, edit: () -> Unit,
+    delete: () -> Unit, newSection: () -> Unit) {
+    Box(Modifier.fillMaxWidth().contextActions(onClick = { store.openBot(bot.id) }, reorder = drag, preview = {
         Box(Modifier.padding(horizontal = 8.dp)) { BotRow(bot, state) }
     }) {
         listOfNotNull(
             MenuItem(if (bot.pinned) "Unpin" else "Pin", icon = if (bot.pinned) "pin.slash" else "pin") {
                 store.command("updateBot", buildJsonObject { put("id", bot.id); put("pinned", !bot.pinned) }, "roster:" + bot.id)
-            }.takeUnless { bot.lead },
+            },
+            if (state.supportsSections) sectionMenu(bot, sections, { store.setSection(bot.id, it) }, newSection) else null,
             if (bot.kind == "group") MenuItem("Edit group", icon = "person.2", action = edit)
             else MenuItem("Edit profile", icon = "pencil", action = edit),
             MenuItem("Mark as read", icon = "checkmark.message") {
                 store.command("markRead", buildJsonObject { put("botId", bot.id) }, "roster:" + bot.id)
             },
-            // A group has no agent session of its own.
-            MenuItem("New session", icon = "arrow.counterclockwise", action = newSession).takeIf { bot.kind != "group" },
+            MenuItem("Make lead agent", icon = "star") {
+                store.command("setLead", buildJsonObject { put("botId", bot.id) }, "roster:" + bot.id)
+            }.takeIf { !bot.lead && bot.kind != "group" && state.supportsLeadChoice },
+            // The lead stays in the list.
             MenuItem("Hide from list", icon = "eye.slash") {
                 store.command("updateBot", buildJsonObject { put("id", bot.id); put("hidden", true) }, "roster:" + bot.id)
             }.takeUnless { bot.lead },
-            MenuItem("Delete", icon = "trash", destructive = true, divider = true, action = delete).takeUnless { bot.lead },
+            // An older computer keeps its lead.
+            MenuItem("Delete", icon = "trash", destructive = true, action = delete).takeIf { !bot.lead || state.supportsLeadChoice },
         )
     }.semantics {
         contentDescription = bot.name
@@ -205,7 +258,7 @@ internal fun moved(roster: List<Bot>, id: String, offset: Int): List<String>? {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (bot.pinned && !bot.lead) Symbol("pin.fill", size = 13.dp, tint = Palette.tertiary)
+                    if (bot.pinned) Symbol("pin.fill", size = 13.dp, tint = Palette.tertiary)
                     Text(bot.name, Modifier.weight(1f, fill = false), style = Type.body.semibold, color = Palette.text, maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
                 }
@@ -215,12 +268,17 @@ internal fun moved(roster: List<Bot>, id: String, offset: Int): List<String>? {
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.weight(1f)) { Preview(bot, state) }
-                if (bot.unread > 0) Box(Modifier.height(18.dp).widthIn(min = 18.dp).clip(Capsule()).background(Palette.accentFill)
-                    .padding(horizontal = 6.dp).semantics { contentDescription = "${bot.unread} unread" }, contentAlignment = Alignment.Center) {
-                    Text("${bot.unread}", style = Type.caption2.bold, color = Palette.onAccent)
-                }
+                if (bot.unread > 0) UnreadBadge(bot.unread)
             }
         }
+    }
+}
+
+/** A count of unread messages in the accent capsule (a row, a folded section). */
+@Composable internal fun UnreadBadge(count: Int) {
+    Box(Modifier.height(18.dp).widthIn(min = 18.dp).clip(Capsule()).background(Palette.accentFill)
+        .padding(horizontal = 6.dp).semantics { contentDescription = "$count unread" }, contentAlignment = Alignment.Center) {
+        Text("$count", style = Type.caption2.bold, color = Palette.onAccent)
     }
 }
 
@@ -280,8 +338,13 @@ internal fun messagePreview(text: String): String {
     val summary = connectionSummary(state)
     DropdownMenu({
         listOf(
-            MenuItem("All computers", icon = "checkmark"),
-            *state.computers.map { MenuItem("${it.name} · ${connectionLabel(state)}", icon = "checkmark") }.toTypedArray(),
+            MenuItem("All computers", icon = "desktopcomputer", selected = true),
+            *state.computers.map { computer ->
+                val device = state.cloudComputers.firstOrNull { it.computerId == computer.id }?.device
+                    ?: if (state.computers.size == 1) state.hello?.text("device") else null
+                MenuItem(computer.name, icon = computerSymbol(device), selected = true,
+                    verbatim = true, detail = connectionLabel(state))
+            }.toTypedArray(),
             MenuItem("Reconnect", icon = "arrow.clockwise", divider = true, enabled = state.computers.isNotEmpty()) { store.reconnect() },
             MenuItem("Manage computers", icon = "desktopcomputer", action = manage),
         )

@@ -7,7 +7,7 @@ import {
   chosenModel,
   chosenVoice,
   dictationEngine,
-  engine,
+  callEngineChoice,
   isVoiceProvider,
   language,
   mode,
@@ -36,7 +36,7 @@ export const onDeviceUnavailableReason = () =>
 export const VoiceSettings = {
   /** The provider picked in the call settings; null for on-device. */
   provider: (): VoiceProvider | null => {
-    const value = engine.get()
+    const value = callEngineChoice()
     return isVoiceProvider(value) ? value : null
   },
   /** The provider picked for dictation; null for on-device. */

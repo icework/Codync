@@ -215,8 +215,6 @@ export class FakeHost {
         this.settle(id)
         return {}
       }
-      case 'newSession':
-        return {}
       case 'createBot':
       case 'updateBot':
         return { bot: this.saveBot(b as unknown as BotDraft | GroupDraft) }
@@ -225,6 +223,16 @@ export class FakeHost {
           const bot = this.bots.get(id)
           if (bot) this.emitBot(Object.assign(bot, { position }))
         })
+        return {}
+      }
+      case 'renameSection': {
+        const to = typeof b.to === 'string' ? b.to.trim() || undefined : undefined
+        for (const bot of this.bots.values()) if (bot.section === str('from')) this.emitBot(Object.assign(bot, { section: to }))
+        return {}
+      }
+      case 'setLead': {
+        const lead = str('botId')
+        for (const bot of this.bots.values()) if (bot.lead !== (bot.id === lead)) this.emitBot(Object.assign(bot, { lead: bot.id === lead }))
         return {}
       }
       case 'deleteBot': {

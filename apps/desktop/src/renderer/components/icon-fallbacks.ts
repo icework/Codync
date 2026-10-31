@@ -23,6 +23,7 @@ const map: Record<string, IconNode> = {
   'arrow.down': L.ArrowDown,
   'arrow.down.to.line': L.Download,
   'arrow.down.circle': L.CircleArrowDown,
+  'arrow.clockwise.circle': L.RotateCw,
   'arrow.down.right.and.arrow.up.left': L.Minimize2,
   'arrow.left': L.ArrowLeft,
   'arrow.left.arrow.right': L.ArrowLeftRight,
@@ -115,6 +116,7 @@ const map: Record<string, IconNode> = {
   macmini: L.Server,
   'macpro.gen3': L.Server,
   macstudio: L.Server,
+  macwindow: L.AppWindow,
   magnifyingglass: L.Search,
   mic: L.Mic,
   moon: L.Moon,
@@ -190,4 +192,27 @@ export function fallbackSvg(name: string): string {
     .join('')
   cache.set(name, svg)
   return svg
+}
+
+/** The same icon as a canvas path in Lucide's 24-point box, for images drawn outside the DOM (menu icons). */
+export function fallbackPath(name: string): Path2D {
+  const path = new Path2D()
+  const n = (v: unknown) => Number(v ?? 0)
+  for (const [tag, a] of map[name] ?? L.Circle) {
+    if (tag === 'path') path.addPath(new Path2D(String(a.d)))
+    else if (tag === 'rect') path.roundRect(n(a.x), n(a.y), n(a.width), n(a.height), n(a.rx))
+    else if (tag === 'line') {
+      path.moveTo(n(a.x1), n(a.y1))
+      path.lineTo(n(a.x2), n(a.y2))
+    } else if (tag === 'circle' || tag === 'ellipse') {
+      const [rx, ry] = tag === 'circle' ? [n(a.r), n(a.r)] : [n(a.rx), n(a.ry)]
+      path.moveTo(n(a.cx) + rx, n(a.cy))
+      path.ellipse(n(a.cx), n(a.cy), rx, ry, 0, 0, Math.PI * 2)
+    } else {
+      const points = String(a.points).trim().split(/[\s,]+/).map(Number)
+      for (let i = 0; i + 1 < points.length; i += 2) path[i ? 'lineTo' : 'moveTo'](points[i], points[i + 1])
+      if (tag === 'polygon') path.closePath()
+    }
+  }
+  return path
 }

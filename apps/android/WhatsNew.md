@@ -7,14 +7,9 @@ released version's section; a version without one gets the PRs' "What's New: And
 else a generic "Bug fixes and improvements" line. Delete old sections.
 -->
 
-## 2.31.2
-
+## 2.33.5
 ### zh-Hant
-- 從手機更新電腦時，電腦重新啟動的期間會顯示「正在更新…」，不會再要你申請訪問。
-- Codex bot 現在拿得到和你 Codex 設定裡同名的聯結器（例如 Notion），不會再看不到它的工具。
-- Codex bot 傳訊息和整理記憶的動作，不會再出現在工作步驟裡。
+- 用量上限現在標示已用比例，例如「已用 62%」，不會再誤以為是剩餘量。Antigravity 的 Gemini 上限改名為「Gemini 5h」與「Gemini 7d」。
 
 ### en-US
-- While a computer restarts for an update you started from your phone, it shows Updating… instead of asking you for access.
-- Codex bots now get a connector that shares its name with a server in your Codex config, such as Notion, instead of missing its tools.
-- A Codex bot's own messages and memory upkeep no longer show among its working steps.
+- Usage limits now say how much is used, such as "62% used", so they no longer read as what's left. Antigravity's Gemini limits are now named "Gemini 5h" and "Gemini 7d".

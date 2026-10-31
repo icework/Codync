@@ -55,7 +55,7 @@ host answers and sends it once the host is up.
 | `phone_connected` | host | A paired phone connects, at most once per phone per UTC day | `platform` |
 | `notifications_answered` | iOS, Android | The system notification prompt was answered | `granted`, `source` (`settings`/`widgets`/`automatic`) |
 | `notification_opened` | iOS, Android | A Codync notification was tapped | `kind` (`done`/`needs_input`/`failed`) |
-| `star_prompt_answered` | host `track` (desktop) | The GitHub star sheet was answered or closed | `ask` (`first`/`second`), `starred` |
+| `star_prompt_answered` | host `track` (desktop) | The GitHub star setup invitation or reminder was answered or closed | `ask` (`first`/`second`), `starred` |
 | `link_opened` | host `track` (desktop), iOS, Android | An outbound link was opened (`install_command`: an install command copied) | `link` (`github`/`docs`/`issues`/`discord`/`app_store`/`demo`/`tailscale`/`privacy`/`support`/`install_command`/`product_hunt`) |
 
 ## Using Codync
@@ -64,8 +64,9 @@ host answers and sends it once the host is up.
 |---|---|---|---|
 | `screen_viewed` | host `track` (desktop, TUI), iOS, Android | A screen, sheet or tab is shown | `screen` (see *Screens*) |
 | `bot_created` | host | `createBot` | `kind` (`bot`/`group`), `agent`, `model` or `members` (count) |
-| `bot_updated` | host | `updateBot` | `fields`: the settings that changed, as the bot config's own camelCase keys (`model`, `permission`, `pinned`, `modelOptions`, `fastMode`, …), never their values |
+| `bot_updated` | host | `updateBot` | `fields`: the settings that changed, as the bot config's own camelCase keys (`model`, `permission`, `pinned`, `section`, `modelOptions`, `fastMode`, …), never their values |
 | `bots_reordered` | host | `reorderBots` | — |
+| `section_renamed` | host | `renameSection` | `removed`: whether it removed the section (`to` empty or `null`); never the names |
 | `bot_deleted` | host | `deleteBot` | — |
 | `message_sent` | host | `send` (a resend counts once) | `kind`, `agent`, `reply` (whether it quotes a message), `attachments` (count) |
 | `turn_stopped` | host | `stop` | — |
@@ -100,6 +101,7 @@ host answers and sends it once the host is up.
 | `host_update_installed` | host | `installHostUpdate` | — |
 | `network_joined` | host | `networkCreate` / `networkJoin`: the computer is in a network of the user's computers | `via` (`create`/`invite`), never a name, invite or connector address |
 | `network_changed` | host | `networkInvite` / `networkPromote` / `networkRemove` / `networkRecover` / `setNetworkRules` / `networkLeave` | `action` (`invite`/`promote`/`remove`/`recover`/`rules`/`leave`), never a computer's name, the invite, the recovery code or a rule |
+| `network_failed` | host | A network step failed: a saved network didn't start with the host, a bot's letter to another computer didn't go (refused, or no such computer; one queued for a computer that's away isn't a failure), a request's outcome didn't go back, a letter from another computer couldn't be taken in, or a `network*` call failed | `stage` (`start`/`send`/`reply`/`receive`/`action`); for `action`, the call's own `via` or `action` as on `network_joined` / `network_changed`; never the error's text, a name or an address |
 
 ## Screens
 

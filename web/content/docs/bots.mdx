@@ -4,13 +4,17 @@ You can make as many bots as you like, and they work at the same time. A reviewe
 
 ## Your lead bot
 
-Every computer comes with one bot of its own, named **Codync** until you rename it: your lead bot. It sits at the top of the list with a gold star at the bottom-right of its avatar, and it's the one to talk to first. Open its details and tap or click the larger star to read what your **Lead agent** does. In the terminal, click its gold star or select the lead bot and press `I`; use the arrow keys to scroll and `Esc` to close.
+Every computer comes with one bot of its own, named **Codync** until you rename it: your lead bot. It has a gold star at the bottom-right of its avatar, and it's the one to talk to first. Open its details and tap or click the larger star to read what your **Lead agent** does. In the terminal, click its gold star or select the lead bot and press `I`; use the arrow keys to scroll and `Esc` to close.
 
 - **It takes initiative.** It keeps track of what you're working toward, follows up on what's still open and offers the next step. When it could help more with access to one of your services, such as Gmail or your calendar, it says what for and asks you to connect it, with a card in the chat.
 - **It checks in.** Its routine **Check in** runs at 9:00 and 18:00 on your computer's clock. If something deserves your attention, or there's a step it can take for you, it messages you; otherwise it stays quiet. What it reads in your email, documents or web pages is information to it, never instructions, and it doesn't send, forward, reply to, delete, pay for or post anything you didn't ask for in the chat. It skips a check-in while your agent plan is above 75% of a limit. Change the times, pause it or delete it like any routine. See [Routines](/docs/routines).
 - **It speaks first on a call.** Call it and it opens with what's worth your attention, or a greeting. Other bots wait for you to speak. See [Voice](/docs/voice).
 
-You set it up like any bot: name, avatar, agent, folder, connectors. It can't be deleted or hidden, and it stays on top, so it has no Pin.
+You set it up and arrange it like any bot: name, avatar, agent, folder, connectors, and where it sits in the list (drag it, pin it or move it to a [section](#sections)). It can't be hidden, so the bot your shortcuts call is always in the list.
+
+**Pick your own lead.** Any other bot can take the role: touch and hold it on the iPhone or Android, or right-click it on the desktop, and choose **Make lead agent** (in the terminal, select it and press `*`). The star, the calls and shortcuts that name no bot, and speaking first move to it; the bot that led before becomes an ordinary bot again and keeps its routines, Check in included. You can also delete the lead like any bot. Codync doesn't make a new one; until you pick another, Open Live Mode asks which bot to call.
+
+**More than one computer.** Each computer has its own lead. On the iPhone, Siri, the Action button and Open Live Mode without a bot call the lead of the first computer in your list. To call another one, go to **Settings → Shortcuts → Lead to call** and pick it.
 
 ## How a bot runs
 
@@ -25,7 +29,7 @@ The host on your computer runs every bot. A bot's agent starts when you send it 
 
 ## Profile
 
-- **Avatar:** a character shape and a color.
+- **Avatar:** a character shape and a color, or your own image.
 - **Name:** shown in the bot list, the chat and notifications. If you create a bot without a name, it's called "New Bot" until Codync names it after its first few conversations.
 - **Standing instructions:** rules that always apply, such as "Reviews PRs. Never pushes without asking." Put task-specific requests in the chat instead. The bot gets your changes with its next message, and the conversation continues.
 
@@ -45,11 +49,13 @@ Changing the agent or the model starts a new agent session. The chat history sta
 The **Workspace** setting is the folder the bot starts in.
 
 - **Personal workspace** (the default): a folder of its own inside Codync's data folder, `~/.codync/bots/`. It stays when you rename the bot, change its model, restart the computer or start a new session.
-- **Choose project folder…**: an existing folder on the computer, such as a Git repository. The folder picker browses the computer's folders, wherever you are.
+- **Choose project folder…**: an existing folder on the computer, such as a Git repository. The folder picker browses the computer's folders, wherever you are. Start with **Recent workspaces**, or choose **Browse other folders**. In the browser, use the path breadcrumbs and **Parent folder** to move through folders or Windows drives, or **Enter folder path** to paste an absolute path (including `~/`). Search filters the visible recent list or the current folder, not the whole computer. Confirm with **Use this folder** at the bottom. Recent selections are stored on that computer and shared across its connected clients; older hosts support browsing without recent history. Linked folders (symlinks, junctions, mounted drives) show up like any other folder.
 
 Either way, the bot can work in other folders when you ask it to. A workspace isn't a sandbox: the bot can reach whatever its agent's own permissions allow. Several bots working in the same project folder can get in each other's way, and Codync doesn't create separate Git worktrees for them.
 
 Changing the folder starts a new agent session.
+
+When there are no recent workspaces, **Browse other folders** appears first. After you choose a folder, recent workspaces and their search appear on your next visit.
 
 ## Permissions: Ask me or Approve automatically
 
@@ -86,7 +92,7 @@ Each bot keeps a long-term memory across sessions, which you can read on its **M
 
 ## Organizing your bots
 
-- **Pin:** pinned bots stay at the top of the list, under your lead bot. iPhone: touch and hold the bot. Desktop: right-click it. Terminal UI: `p`.
+- **Pin:** pinned bots stay at the top of the list. iPhone: touch and hold the bot. Desktop: right-click it. Terminal UI: `p`.
 - **Order:** drag bots into the order you want. The computer keeps the order, so it's the same on every device. iPhone: touch and hold a bot, then drag it. Desktop: drag it, or select it and press Alt+Up or Alt+Down. Terminal UI: `J` and `K`.
 - **Computers:** with more than one computer, each has a heading above its bots. Drag a heading (iPhone: touch and hold it first) to move that computer and its bots up or down; this order stays on the device. Click or tap a heading to fold its bots away.
 - **Hide:** iPhone: touch and hold the bot, then **Hide from list**. Desktop: right-click it, then **Hide from sidebar**. A hidden bot sends no notifications. To bring it back:
@@ -95,19 +101,21 @@ Each bot keeps a long-term memory across sessions, which you can read on its **M
   - **Terminal UI:** press Ctrl+K, type `unhide`, and pick **Unhide** followed by the bot's name.
 - **Mark as read:** clears a bot's unread badge, from the same menus.
 
-## New session
+### Sections
+
+Sections group a computer's bots under headings you name, such as Work and Personal. They need Codync 2.32.0 or newer on the computer.
+
+- **Move a bot into a section:** open the bot's menu (iPhone: touch and hold it; Desktop: right-click it) and choose **Move to section**, then a section, **New section…** or **Remove from section**. On Desktop, hover over **Move to section** to open its submenu; clicking it or pressing `→` also opens it. Terminal UI: `w`, then type the section's name, or leave it empty to take the bot out.
+- **Reorder sections:** drag a heading up or down (iPhone: touch and hold, then drag). Move custom sections above or below **Bots**; pinned bots stay on top. Each device remembers its own order. On Desktop, focus a heading and press `Alt+↑` or `Alt+↓`. Terminal UI: select a bot in the section and press `Alt+↑` or `Alt+↓`; its order lasts until you quit.
+- **Fold a section:** tap or click its heading to fold its bots away. A folded heading shows their unread count. Each device keeps its own folds. Terminal UI: `z`, or click the section's label; its folds last until you quit.
+- **Rename or remove a section:** touch and hold its heading (Desktop: right-click it) and choose **Rename section…** or **Remove section**. Its bots stay, without a section. Renaming it to another section's name merges the two. Terminal UI: `W`; an empty name removes the section.
+- Pinned bots stay on top, outside sections. A pinned bot goes back to its section when you unpin it. Bots in no section sit under a **Bots** label, and dragging moves a bot only within its section.
+
+## Sessions
 
 A bot's chat and its agent's session are two different things. The chat is the permanent record you scroll through. The session is the agent's working context: what the model currently remembers of the conversation.
 
-**New session** starts the agent with a fresh context. The chat history stays where it is, and so do the bot's memory, settings and files. Use it when the agent's context has drifted, or before starting unrelated work.
-
-- **iPhone:** touch and hold the bot in the list, then **New session**.
-- **Desktop:** right-click the bot in the sidebar, then **New session**.
-- **Terminal UI:** press `S`.
-
-Codync asks you to confirm first. A group chat has no session of its own, so it has no New session.
-
-A new session also starts when you change the bot's agent, model or folder. Codync can also start a fresh conversation on its own when a long conversation needs one; the chat then shows a card with a summary you can edit or skip. See [Fresh conversations](/docs/conversations#fresh-conversations).
+You never start a session yourself. Codync starts a fresh one on its own when a long conversation needs one; the chat then shows a card with a summary you can edit or skip. See [Fresh conversations](/docs/conversations#fresh-conversations). A new session also starts when you change the bot's agent, model or folder. Either way the chat history stays where it is, and so do the bot's memory, settings and files.
 
 ## Delete a bot
 
@@ -115,9 +123,21 @@ A new session also starts when you change the bot's agent, model or folder. Cody
 - **Desktop:** right-click the bot in the sidebar, then **Delete**.
 - **Terminal UI:** press `x`.
 
-Confirm with **Delete bot and its conversation**. Your lead bot can't be deleted. The bot's chat and settings go away and it leaves any group chats it was in. Files it changed on your computer stay as they are, and so does its personal workspace folder.
+Confirm with **Delete bot and its conversation**. Deleting your lead bot leaves you without one until you pick another; Open Live Mode then asks which bot. The bot's chat and settings go away and it leaves any group chats it was in. Files it changed on your computer stay as they are, and so does its personal workspace folder.
 
 ## Copy a bot's setup
 
 On the iPhone details sheet or the desktop details panel, **Create template** shows the bot's settings as text you can copy, without its conversation.
 
+
+## Custom icons
+
+Open an existing bot's avatar picker and choose **Upload from desktop** (**Upload image** on phones), or choose **Paste URL** to reveal the address field, paste an HTTPS image address, and press the arrow button. Changes save immediately. **Tint icon** uses the bot's color; turn it off to keep the picture's original colors. **Use default** restores the character.
+
+PNG, JPEG and WebP files can be up to 5 MiB and 4096 × 4096 pixels. SVG files can be up to 256 KiB; external images and fonts are not loaded. Codync turns the image into a static PNG no larger than 256 × 256 pixels and compresses it to at most 48 KiB. Animated files use a still image.
+
+Sign in to the app and claim your computer before uploading. Choosing an image or Paste URL while signed out opens a sign-in prompt. The computer encrypts images before storing them in private Cloudflare R2 storage. Cached images remain available offline, and showing an icon does not download it from R2 again. New uploads and removals need a connection; a failed save keeps the previous icon. Each computer can have 128 custom icons.
+
+On iPhone, custom pictures stay still in Live Activities and the Dynamic Island. Built-in characters keep their animations. If a cached custom image cannot load, a still default character takes its place.
+
+In the **Terminal UI**, press Ctrl+O in a bot's settings. Enter a local file path or HTTPS URL, choose original colors, tint, or default, then press Enter. The terminal keeps its text avatar; graphical apps show your image.

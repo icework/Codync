@@ -143,20 +143,22 @@ export interface DialogAction {
 }
 
 /** A centered card over a dimmed screen with the actions and Cancel (`.codyncDialog`). */
-export function Dialog({ open, title, message, actions, cancel = 'Cancel', onClose }: {
+export function Dialog({ open, title, message, actions, cancel = 'Cancel', onClose, children }: {
   open: boolean
   title: string
   message?: string | null
   actions: DialogAction[]
   cancel?: string | null
   onClose: () => void
+  /** A field between the text and the buttons (a name to type); `data-autofocus` on it takes the focus. */
+  children?: ReactNode
 }) {
   const { mounted, shown } = usePresence(open, 120)
   const tr = useTr()
-  const last = useRef({ title, message, actions })
+  const last = useRef({ title, message, actions, children })
   const layer = useRef<HTMLDivElement>(null)
   const id = useId()
-  if (open) last.current = { title, message, actions }
+  if (open) last.current = { title, message, actions, children }
   useEscape(open && cancel !== null, onClose)
   useModalFocus(open, mounted, layer)
   if (!mounted) return null
@@ -170,6 +172,7 @@ export function Dialog({ open, title, message, actions, cancel = 'Cancel', onClo
           <Text as="h2" id={`${id}-title`} size="title3" weight="semibold">{shownContent.title}</Text>
           {shownContent.message ? <Text as="div" id={`${id}-message`} size="body" tone="secondary">{shownContent.message}</Text> : null}
         </div>
+        {shownContent.children}
         <div className="dialog-buttons">
           {cancel !== null ? (
             <button className="dialog-button" data-autofocus onClick={onClose}>
@@ -198,12 +201,16 @@ export function Dialog({ open, title, message, actions, cancel = 'Cancel', onClo
 /** One row in a Codync menu: an action, or a choice when `selected` is set. */
 export interface MenuItem {
   title: string
+  /** Secondary context below the main label. */
+  detail?: string
   icon?: string
   /** A picture in the icon's place (an agent's logo). */
   leading?: ReactNode
   selected?: boolean
   destructive?: boolean
   divider?: boolean
+  /** The title is a name the user gave (a section): shown as typed, never translated. */
+  verbatim?: boolean
   action: () => void
 }
 
@@ -271,7 +278,7 @@ export function MenuPanel({ items, reactions, dismiss, maxHeight }: { items: Men
             className={`menu-row ${item.destructive ? 'destructive' : ''} ${highlight === i ? 'highlight' : ''}`}
             role={item.selected === undefined ? 'menuitem' : 'menuitemradio'}
             aria-checked={item.selected}
-            title={tr(item.title)}
+            title={item.verbatim ? item.title : tr(item.title)}
             onMouseEnter={() => setHighlight(i)}
             onClick={() => {
               dismiss()
@@ -283,7 +290,10 @@ export function MenuPanel({ items, reactions, dismiss, maxHeight }: { items: Men
                 {item.leading ?? (item.icon ? <Icon name={item.icon} size={12} /> : null)}
               </span>
             ) : null}
-            <span className="menu-title">{tr(item.title)}</span>
+            <span className={`menu-title${item.detail ? ' with-detail' : ''}`}>
+              <span>{item.verbatim ? item.title : tr(item.title)}</span>
+              {item.detail && <span className="menu-detail">{tr(item.detail)}</span>}
+            </span>
             {item.selected !== undefined ? (
               <span className={`check-slot${item.selected ? ' on' : ''}`}>
                 <Icon name="checkmark" size={10} weight="semibold" />

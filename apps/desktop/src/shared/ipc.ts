@@ -44,6 +44,22 @@ export interface TrayImage {
 }
 
 /** What the tray menu shows; the renderer owns the stores and sends this on every change. */
+/** The SF Symbols beside the tray menu's actions. */
+export const TRAY_SYMBOLS = [
+  'macwindow',
+  'qrcode',
+  'square.on.square',
+  'arrow.down.circle',
+  'arrow.clockwise.circle',
+  'list.bullet.rectangle',
+  'person.crop.circle.badge.checkmark',
+  'display',
+  'point.3.connected.trianglepath.dotted',
+  'gearshape',
+  'power',
+] as const
+export type TraySymbol = (typeof TRAY_SYMBOLS)[number]
+
 export interface TraySummary {
   status: string
   canPair: boolean
@@ -57,6 +73,8 @@ export interface TraySummary {
   } | null
   /** This computer's networks (codync-network), lines already translated; null on hosts without them. */
   networks: { title: string; computers: { label: string; dot: TrayImage | null }[] }[] | null
+  /** Windows and Linux: the actions' symbols drawn by the renderer (macOS menus draw SF Symbols); null on macOS. */
+  symbols: Partial<Record<TraySymbol, TrayImage>> | null
   needsAttention: boolean
   textSize: number
   usageIconStyle: 'character' | 'original'

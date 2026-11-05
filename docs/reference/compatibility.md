@@ -5,7 +5,7 @@ different schedules: the iPhone app waits for App Review, the desktop app and st
 update when their owner (or the automatic updater, on by default for hosts that update themselves) installs a release. Any client can
 meet an older or a newer host.
 
-For Kai's personal branch, the [production mobile compatibility gate](../guides/personal-build.md#production-mobile-compatibility-gate) takes precedence over the upstream floor-raising policy below: retain support for the latest available upstream production mobile release (Kai keeps it updated), or stop the personal deployment.
+For Kai's personal branch, the [production mobile compatibility gate](../guides/personal-build.md#production-mobile-compatibility-gate) takes precedence over the upstream floor-raising policy below: retain support for the latest available upstream production mobile release (Kai keeps it updated), or stop the personal deployment for a known incompatibility. Missing manual phone/audio acceptance follows Kai's deploy-then-test policy; it is recorded pending_user_acceptance.
 
 ## Rule
 

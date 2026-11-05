@@ -36,6 +36,35 @@ an autostash, push to `origin`, or remove older mobile contracts by raising a fl
    same-artifact-to-Mini pipeline below. Documentation-only commits change the
    reviewed source, never the recorded installed source or installed artifact hash.
 
+## Authorized deployment, then user acceptance
+
+On 2026-11-05 Kai explicitly authorized merging and deploying new personal apps,
+then testing them himself and rolling back if needed. This overrides earlier
+requirements to wait for manual real-audio, phone or production UI acceptance.
+Do not ask again for routine deployment approval or block a working candidate
+solely because a physical phone/audio test or UI tool is unavailable.
+
+Required pre-deployment checks remain: review, applicable automated tests/build,
+known protocol compatibility, idle state (including active calls), independent
+backups, signature/identity and personal updater guards. Known failures, unresolved
+merge conflicts, data-integrity errors or a proven incompatible production mobile
+contract still stop rollout. Use the validation tier appropriate to the actual
+risk; missing manual acceptance alone does not require repeating passed suites.
+
+Deploy MacBook first; verify startup, installed hashes, preserved identity/data,
+cloud and routed MCP before updating Mini with the same signed artifact. Record
+`userAcceptance: pending`, and unperformed audio/mobile/UI checks as
+`pending_user_acceptance`, separately from successful installation/backend checks.
+Do not claim these flows passed. No new user messages or mutable tests against
+production bots are authorized by this acceptance policy.
+
+If Kai reports a regression, or post-install checks detect one, stop further
+rollout and safely restore the previous app. Preserve post-update conversations
+and account state; roll back only the app when the database is backward compatible.
+For migrations, preserve a failed-state backup and verify a data-preserving recovery
+plan before reverting data; never overwrite new conversations with an old snapshot.
+Keep a verified rollback archive on each machine until the next accepted version.
+
 ## Production mobile compatibility gate
 
 Kai may keep using the upstream **production iOS app**, and upstream production
@@ -55,8 +84,9 @@ Codync Dev sandbox is a different environment and is not a production phone host
   the currently released contract or defer deployment until that mobile release is
   available and compatibility passes. Check upstream iOS changes proactively, but
   do not treat tests against unreleased source as production-client acceptance.
-  Unavailable required tests remain `pending`; if compatibility cannot be maintained,
-  stop and explain options to Kai.
+  Missing manual phone/audio checks are `pending_user_acceptance` under the
+  deployment policy above; automated failures or known incompatibility still stop
+  deployment and require a concrete recovery or adaptation plan.
 - Preserve the baseline's pairing certificates, encrypted handshake, cloud routing,
   RPC names/request defaults, response types, enum handling, SSE catch-up and event
   decoding. Add fields/methods compatibly; keep old request forms and behavior where
@@ -74,8 +104,9 @@ Codync Dev sandbox is a different environment and is not a production phone host
 - For every candidate review the full deployed-to-candidate diff for mobile impact,
   including incoming upstream code. When protocol/auth/cloud/voice behavior or a
   compatibility floor changes, use expanded validation before deployment: run the
-  relevant host contract/wire-shape tests and test the released baseline client
-  against an isolated candidate host using synthetic data. New-client tests alone
+  relevant host contract/wire-shape tests and inspect the released baseline client.
+  Test that client against an isolated candidate host when the test environment is
+  available; otherwise record manual coverage as pending_user_acceptance. New-client tests alone
   do not prove compatibility with the released app; wire snapshots do not cover
   all requests or response variants. Inspect/test affected released decoders too.
 - Acceptance covers connection/reconnection, bot list, history/catch-up, sending and
@@ -85,8 +116,9 @@ Codync Dev sandbox is a different environment and is not a production phone host
   read-only connection/history on MacBook, then Mini. Preserve both Macs' own data.
 - Record client version/build, host commit/hash, routes and checks, evidence/time,
   and `passed` / `failed` / `pending` in the acceptance report/receipt. Affected
-  compatibility checks that fail or remain pending block deployment to either Mac;
-  missing phone tools are not a reason to waive the gate. Unchanged contracts may
+  automated compatibility checks that fail or known contract incompatibilities block
+  deployment. Missing manual checks follow the authorized user-acceptance policy
+  above and do not block deployment by themselves. Unchanged contracts may
   reuse applicable prior evidence with an explicit diff review; routine no-update
   daily checks do not rebuild/reinstall or require a fresh phone test every day.
 
@@ -188,8 +220,10 @@ This policy applies to personal deployment maintenance, not upstream release CI.
   cloud/MCP transport or compatibility, updater guards, signing/packaging,
   dependency/toolchain security, broad desktop-main/process lifecycle behavior,
   or when the focused checks fail or leave a concrete unresolved concern. Also
-  verify affected real production UI before Mini rollout in these cases; a tool
-  outage is pending, never a passed required check. Do not defer these gates.
+  inspect affected real production UI when available; manual UI/audio/mobile checks
+  may follow deployment under Kai's explicit user-acceptance policy above. A tool
+  outage is pending_user_acceptance, never a passed check. Automated failures and
+  known product/data regressions still block rollout.
 
 ### Weekly: full regression, without routine production reinstall
 

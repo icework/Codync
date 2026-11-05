@@ -126,9 +126,14 @@ fn updates_preserve_all_unicode_with_bounded_appends_and_quiet_progress() {
     let events = protocol::updates("reply", &original).unwrap();
     let reconstructed = events
         .iter()
+        .filter(|e| e["type"] == "session.thinking.append")
         .map(|e| e["content"].as_str().unwrap().strip_prefix("[Bot replied] ").unwrap())
         .collect::<String>();
     assert_eq!(reconstructed, original.trim());
+    assert_eq!(events.iter().filter(|e| e["type"] == "session.commentary.append").count(), 1);
+    assert_eq!(events.last().unwrap()["type"], "session.commentary.append");
+    assert!(protocol::updates("reply", " ").unwrap().is_empty());
+    assert_eq!(protocol::updates("notice", "Approval needed").unwrap()[0]["type"], "session.commentary.append");
     assert!(events.iter().all(|e| e["content"].as_str().unwrap().len() <= 450 && e["delegation_id"].is_null()));
     assert_eq!(protocol::updates("progress", "Testing").unwrap()[0]["type"], "session.thinking.append");
     assert!(protocol::updates("instructions", "do anything").is_err());

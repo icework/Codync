@@ -197,7 +197,7 @@ fn milliseconds(value: &Value, field: &str) -> Result<i64> {
 /// UTF-8 bytes conservatively bound tokens for arbitrary scripts, including emoji and CJK.
 pub(super) fn updates(kind: &str, text: &str) -> Result<Vec<Value>> {
     let (event, prefix) = match kind {
-        "reply" => ("session.commentary.append", "[Bot replied] "),
+        "reply" => ("session.thinking.append", "[Bot replied] "),
         "notice" => ("session.commentary.append", "[Notice] "),
         "progress" => ("session.thinking.append", "[Progress] "),
         _ => bail!("Unknown Live update kind."),
@@ -213,6 +213,12 @@ pub(super) fn updates(kind: &str, text: &str) -> Result<Vec<Value>> {
         events.push(json!({"type": event, "event_id": uuid::Uuid::new_v4().to_string(),
             "delegation_id": null, "content": format!("{prefix}{piece}")}));
         rest = tail;
+    }
+    if kind == "reply" && !events.is_empty() {
+        // Feed the complete result quietly, then invite one concise answer, not one spoken turn per chunk.
+        events.push(json!({"type": "session.commentary.append", "event_id": uuid::Uuid::new_v4().to_string(),
+            "delegation_id": null,
+            "content": "The bot's verified reply is now in the preceding [Bot replied] context. Give the key answer in two short sentences, preserving uncertainty. Details remain in chat; offer more if wanted. Keep listening afterward."}));
     }
     Ok(events)
 }

@@ -1,3 +1,4 @@
+import type { VoiceFailureDetail } from '@shared/analytics'
 import type { CallLink } from './call-link'
 
 export const isLiveModel = (model: string) => model.startsWith('gpt-live-') && !model.includes('transcribe')
@@ -13,12 +14,12 @@ export class OpenAILiveSession {
   private queued = 0
   private link: Pick<CallLink, 'startLive' | 'liveEvent' | 'liveUpdate'>
   private send: (event: unknown) => void
-  private failed: (message: string) => void
+  private failed: (message: string, detail: VoiceFailureDetail) => void
 
   constructor(
     link: Pick<CallLink, 'startLive' | 'liveEvent' | 'liveUpdate'>,
     send: (event: unknown) => void,
-    failed: (message: string) => void,
+    failed: (message: string, detail: VoiceFailureDetail) => void,
   ) { this.link = link; this.send = send; this.failed = failed }
 
   async start(model: string, voice: string, sdp: string): Promise<string> {
@@ -31,13 +32,13 @@ export class OpenAILiveSession {
   receive(event: Record<string, unknown>) {
     if (event.type === 'session.closed') {
       this.closed?.()
-      if (!this.closing && !this.stopped) this.failed('OpenAI closed the Live session.')
+      if (!this.closing && !this.stopped) this.failed('OpenAI closed the Live session.', 'session_closed')
       return
     }
     const transcript = event.type === 'session.input_transcript.delta' || event.type === 'session.output_transcript.delta'
     if (this.stopped || (this.closing && !transcript)) return
     if (event.type === 'error' || event.type === 'session.error') {
-      this.failed((event.error as { message?: string } | undefined)?.message ?? 'OpenAI Live reported an error.')
+      this.failed((event.error as { message?: string } | undefined)?.message ?? 'OpenAI Live reported an error.', 'provider_error')
       return
     }
     if (!['response.event', 'session.input_transcript.delta', 'session.output_transcript.delta', 'session.delegation.created'].includes(String(event.type))) return
@@ -76,7 +77,7 @@ export class OpenAILiveSession {
     if (this.stopped || (this.closing && !transcript)) return
     if (this.queued >= 256) {
       this.stopped = true
-      this.failed('The computer cannot keep up with GPT-Live events.')
+      this.failed('The computer cannot keep up with GPT-Live events.', 'queue_full')
       return
     }
     this.queued++
@@ -89,7 +90,7 @@ export class OpenAILiveSession {
       if (this.closing && transcript) console.warn('GPT-Live transcript delivery failed while hanging up.')
       if (!this.stopped && !this.closing) {
         this.stopped = true
-        this.failed(error instanceof Error ? error.message : String(error))
+        this.failed(error instanceof Error ? error.message : String(error), 'host_rpc')
       }
     }).finally(() => { this.queued-- })
   }

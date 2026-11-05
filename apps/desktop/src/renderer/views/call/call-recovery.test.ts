@@ -489,3 +489,23 @@ test('late Live setup failures cannot tear down a replacement connection', async
   o.engine.end()
   replacement.channel.onmessage?.({ data: JSON.stringify({ type: 'session.closed' }) })
 })
+
+
+test('call diagnostics correlate engine replacement and view teardown without error text', () => {
+  const events: Record<string, unknown>[] = []
+  let now = 0
+  const quality = new CallQuality((event) => events.push(event), () => now, 'call-for-local-diagnostics')
+  quality.begin('openai_live')
+  now = 120
+  quality.phase('listening', null)
+  quality.phase('failed', 'connection', 'host_rpc')
+  quality.begin('on_device')
+  quality.report('view_unmounted')
+  quality.report('user')
+  assert.equal(events.length, 2)
+  assert.equal(events[0]!.call_id, 'call-for-local-diagnostics')
+  assert.equal(events[0]!.failure_detail, 'host_rpc')
+  assert.equal(events[0]!.end_reason, 'engine_replaced')
+  assert.equal(events[0]!.ready_ms, 120)
+  assert.equal(events[1]!.end_reason, 'view_unmounted')
+})

@@ -81,6 +81,10 @@ pub enum Reported {
         reconnects: u32,
         stuck: VoiceStuck,
         failure: VoiceFailure,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        end_reason: Option<VoiceEndReason>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        failure_detail: Option<VoiceFailureDetail>,
     },
     WindowRecovery {
         outcome: WindowRecoveryOutcome,
@@ -91,6 +95,30 @@ pub enum Reported {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<ClaimFailure>,
     },
+}
+
+/// Desktop lifecycle diagnostics; older clients omit these fields.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceEndReason {
+    User,
+    ViewUnmounted,
+    EngineReplaced,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceFailureDetail {
+    None,
+    SessionClosed,
+    ProviderError,
+    HostRpc,
+    QueueFull,
+    Unspecified,
+    #[serde(other)]
+    Other,
 }
 
 // Value lists. A value a newer client adds arrives as `other` instead of being refused.
@@ -271,6 +299,18 @@ mod tests {
 
     fn read_json(b: &Value) -> Option<(Event, Value)> {
         read(b).ok().map(|(e, p)| (e, Value::Object(p)))
+    }
+
+    #[test]
+    fn voice_diagnostics_never_send_local_call_ids_or_error_text_to_analytics() {
+        let (_, properties) = read_json(&json!({"event":"voice_call_quality", "engine":"openai_live",
+            "reconnects":0, "stuck":"none", "failure":"connection", "end_reason":"view_unmounted",
+            "failure_detail":"host_rpc", "call_id":"private-local-id", "error":"private error"}))
+        .unwrap();
+        assert!(properties.get("call_id").is_none());
+        assert!(properties.get("error").is_none());
+        assert_eq!(properties["end_reason"], "view_unmounted");
+        assert_eq!(properties["failure_detail"], "host_rpc");
     }
 
     #[test]

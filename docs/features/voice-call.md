@@ -484,3 +484,28 @@ and two seconds for host delivery). Queued tool requests are discarded during
 closing; late results never play back. An unconfirmed close or transcript flush is
 logged rather than represented as confirmed. The existing call analytics use
 `openai_live` to distinguish this path without sending model names or call content.
+
+
+### Personal Live responsiveness and diagnostics
+
+The personal Live prompt permits short answers from reliable stable knowledge, the
+conversation or still-current verified results. Fresh facts, private data and actions
+still use backend tools. Ambiguous names should be clarified before search. The
+Responses router asks for a focused check and a short answer first, preserving the
+user's corrections; deeper research remains available when requested or needed for
+accuracy. These are model instructions, not a guaranteed search count or latency SLA.
+
+Bot reply payloads now enter Live as bounded `session.thinking.append` chunks,
+followed by a single `session.commentary.append` asking for a concise answer with
+uncertainty intact. This preserves the entire existing reply cue without asking the
+voice to speak every chunk separately. Notices still use commentary; progress stays
+quiet. The underlying chat/call history retains the full bot response. Completion
+must not itself end the call. See [local diagnostics](../guides/live-diagnostics.md).
+
+This host-side behavior applies equally to desktop and personal iOS/Android Live
+clients: they already forward the returned protocol events without interpreting them.
+Production upstream mobile clients retain the existing Realtime path and unchanged
+RPC shapes/floors. No mobile source/UI changes or phone installation are required.
+Desktop-only lifecycle diagnostics identify its React view teardown and engine
+replacement; the terminal has no voice engine. Existing iOS/Android quality telemetry
+is unchanged and does not claim the new desktop teardown detail.

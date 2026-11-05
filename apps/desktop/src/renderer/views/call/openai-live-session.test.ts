@@ -8,6 +8,7 @@ function fixture() {
   const sent: unknown[] = []
   const seen: unknown[] = []
   const failures: string[] = []
+  const details: string[] = []
   const link = {
     startLive: async (_model: string, _voice: string, sdp: string) => {
       seen.push(sdp)
@@ -22,8 +23,8 @@ function fixture() {
       return { events: [{ type: 'session.commentary.append', content: text }] }
     },
   }
-  const session = new OpenAILiveSession(link, (event) => sent.push(event), (error) => failures.push(error))
-  return { session, link, sent, seen, failures }
+  const session = new OpenAILiveSession(link, (event) => sent.push(event), (error, detail) => { failures.push(error); details.push(detail) })
+  return { session, link, sent, seen, failures, details }
 }
 
 test('Live excludes transcription and Realtime models', () => {
@@ -70,6 +71,7 @@ test('Live host failures surface and do not retry side effects', async () => {
   await tick()
   assert.equal(calls, 1)
   assert.deepEqual(c.failures, ['Host went offline'])
+  assert.deepEqual(c.details, ['host_rpc'])
 })
 
 test('Live shutdown waits for acknowledgement and drops queued results', async () => {
@@ -116,4 +118,16 @@ test('hanging up drains received transcripts after an in-flight host request wit
   await end
   assert.deepEqual(forwarded, ['response.event', 'session.input_transcript.delta', 'session.output_transcript.delta'])
   assert.deepEqual(c.sent, [{ type: 'session.close' }])
+})
+
+
+test('provider closure and provider errors have distinct content-free failure categories', async () => {
+  const closed = fixture()
+  await closed.session.start('gpt-live-1', 'marin', 'offer')
+  closed.session.receive({ type: 'session.closed' })
+  assert.deepEqual(closed.details, ['session_closed'])
+  const failed = fixture()
+  await failed.session.start('gpt-live-1', 'marin', 'offer')
+  failed.session.receive({ type: 'error', error: { message: 'private provider detail' } })
+  assert.deepEqual(failed.details, ['provider_error'])
 })

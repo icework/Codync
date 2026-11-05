@@ -1,3 +1,4 @@
+import type { VoiceEndReason } from '@shared/analytics'
 import {
   isWorking,
   needsInput,
@@ -179,10 +180,10 @@ export class BotStore extends BotSync {
   }
 
   /** A finished call's line, with the rest of its transcript; the chat then shows the call's messages behind it. */
-  async endCall(botId: string, call: string, seconds: number, lines: CallLine[]) {
+  async endCall(botId: string, call: string, seconds: number, lines: CallLine[], endReason?: VoiceEndReason) {
     try {
       // Safe to repeat: the computer ends a call once.
-      const { entry } = await this.withLink((c) => c.call<{ entry: Entry | null }>('endCall', { botId, callId: call, seconds, lines }), true)
+      const { entry } = await this.withLink((c) => c.call<{ entry: Entry | null }>('endCall', { botId, callId: call, seconds, lines, ...(endReason ? { endReason } : {}) }), true)
       if (entry) this.upsert(entry)
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error)

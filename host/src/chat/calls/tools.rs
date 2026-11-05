@@ -29,6 +29,7 @@ pub fn declarations() -> Value {
 /// Runs one of the voice's tool calls on call `call`'s bot, after adding what was said that the app still held
 /// (`lines`). A failure is the tool's answer, for the voice to say.
 pub async fn call(hub: &Arc<Hub>, call: &str, name: &str, args: &Value, lines: &Value) -> Value {
+    let started = std::time::Instant::now();
     let run = async {
         let bot = super::bot_of(&hub.store, call).ok_or_else(|| anyhow!("The call has ended."))?;
         super::add_lines(hub, call, lines)?;
@@ -46,7 +47,11 @@ pub async fn call(hub: &Arc<Hub>, call: &str, name: &str, args: &Value, lines: &
             _ => Err(anyhow!("Unknown tool {name}.")),
         }
     };
-    run.await.unwrap_or_else(|e| json!({"error": format!("{e:#}")}))
+    let result = run.await.unwrap_or_else(|e| json!({"error": format!("{e:#}")}));
+    tracing::info!(target: "codync_host::voice_diagnostics", call = super::diagnostics::call_id(call),
+        operation = "tool_completed", tool = super::diagnostics::tool_name(name),
+        elapsed_ms = started.elapsed().as_millis(), ok = result.get("error").is_none(), "voice diagnostic");
+    result
 }
 
 /// `send_to_bot`: the voice's words to the bot, with what the user said since the bot last heard from the call,

@@ -140,3 +140,20 @@ GPT-Live handles speech while a Responses model (`gpt-6-luna`) routes requests t
 **Test** checks model access without creating a paid Live session; a successful test does not verify microphone audio or that the routing model can run. Start a short call to verify those. Audio flows directly between your device and OpenAI; your API key stays on the host. The conversation context and tool results are sent to OpenAI to support the call.
 
 Talking over the voice uses GPT-Live's own interruption handling. A manual interruption silences local playback until your next transcribed speech; it does not stop the bot's work. Ask to stop the bot, or use its stop control. Ending a call closes the voice connection; work already handed to a bot can continue.
+
+
+### Short answers with personal GPT-Live
+
+The personal build's GPT-Live voice aims to answer simple questions briefly and reuse
+results already in the conversation. Questions needing current facts or computer work
+still go to your bot; an unclear name should be clarified before starting a search.
+For a quick lookup, the bot is asked for a short conclusion first. You can continue
+talking while it works. Long replies are offered as a short spoken summary, with the
+full response available in the call's conversation; ask for more detail when wanted.
+This does not guarantee a fixed number of searches or a particular response time.
+
+The personal build records local timing and failure categories to help diagnose
+premature disconnections. These diagnostic entries contain no speech, chat text,
+provider error messages or API keys. They distinguish pressing End call from leaving
+the desktop conversation view; leaving that view currently ends its call. Completing
+a bot task should keep the call open for your next question.

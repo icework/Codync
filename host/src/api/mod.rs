@@ -59,7 +59,11 @@ fn str_arg<'a>(b: &'a Value, k: &str) -> Result<&'a str> {
 pub async fn dispatch(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value) -> Result<Value> {
     devices::permit(caller, method)?;
     let observed = crate::analytics::observe_call(hub, caller, method, &b);
+    let diagnostic = crate::chat::calls::diagnostics::Observation::start(method, &b);
     let result = route(hub, caller, method, b).await;
+    if let Some(diagnostic) = diagnostic {
+        diagnostic.finish(&result);
+    }
     let report = observed.and_then(|(event, properties)| match &result {
         Ok(answer) => crate::analytics::answered(event, properties, answer).map(|p| (event, p)),
         Err(error) => crate::analytics::failed(event, properties, error),

@@ -1,3 +1,4 @@
+import type { VoiceFailureDetail } from '@shared/analytics'
 import type { HostClient } from '../../client/host-client'
 import type { VoiceFailure } from '@shared/analytics'
 import type { CallCue } from '@shared/calls'
@@ -110,6 +111,7 @@ export abstract class VoiceEngine extends Observable {
   abstract readonly provider: VoiceProvider | null
   /** Keeps the call subscribed to replies while audio is active. */
   onActivityChanged: ((active: boolean) => void) | null = null
+  failureDetail: VoiceFailureDetail = 'unspecified'
   protected ended = false
   private mutedValue = false
 

@@ -77,6 +77,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
   /** The call settings the current engine was built from. */
   const engineChoice = useRef('')
   const closed = useRef(false)
+  const userEnded = useRef(false)
   /** What carries the current engine's audio, and whether the call has been counted (once its first engine runs). */
   const engineName = useRef<VoiceCallEngine>('on_device')
   const counted = useRef(false)
@@ -87,7 +88,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
   link.current ??= new CallLink(store, botId, crypto.randomUUID())
   /** Each engine's `voice_call_quality`. */
   const quality = useRef<CallQuality | null>(null)
-  quality.current ??= new CallQuality((event) => analytics.track(event))
+  quality.current ??= new CallQuality((event) => analytics.track(event), Date.now, link.current.call)
 
   const countCloudMinutes = () => {
     const provider = engine.current?.provider
@@ -214,8 +215,8 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
       countCloudMinutes()
       onSpeaking(false)
       interrupt.current = null
-      link.current?.end(Math.floor((Date.now() - startedAt) / 1000), engine.current?.awaitEnd())
-      quality.current?.report()
+      link.current?.end(Math.floor((Date.now() - startedAt) / 1000), engine.current?.awaitEnd(), userEnded.current ? 'user' : 'view_unmounted')
+      quality.current?.report(userEnded.current ? 'user' : 'view_unmounted')
     }
   }, [])
   useEffect(() => voiceSettingsClosed.subscribe(switchEngine), [])
@@ -223,7 +224,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
   const phase = session?.phase ?? null
   useEffect(() => {
     if (!session) return
-    if (phase) quality.current!.phase(phase, session.failureKind)
+    if (phase) quality.current!.phase(phase, session.failureKind, session.failureDetail)
     onSpeaking(phase === 'speaking')
     interrupt.current = phase === 'speaking' ? () => session.interrupt() : null
     // Once per call, so an engine taking over doesn't count or open it again.
@@ -281,7 +282,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
         >
           <Icon name={muted ? 'mic.slash' : 'mic'} size={16} weight="medium" scaled={false} />
         </button>
-        <button className="call-round end" title="End call" aria-label="End call" onClick={onEnd}>
+        <button className="call-round end" title="End call" aria-label="End call" onClick={() => { userEnded.current = true; onEnd() }}>
           <Icon name="xmark" size={16} weight="semibold" scaled={false} />
         </button>
       </div>

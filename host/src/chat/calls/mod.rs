@@ -8,6 +8,7 @@
 
 mod announce;
 pub mod context;
+pub mod diagnostics;
 pub mod live;
 mod project;
 mod speech;

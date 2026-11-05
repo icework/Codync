@@ -309,7 +309,9 @@ fn tell(hub: &Hub, call: &str, cue: &Cue) {
         }
         event
     };
-    let _ = hub.events.send(event);
+    let receivers = hub.events.send(event).unwrap_or(0);
+    tracing::info!(target: "codync_host::voice_diagnostics", call = super::diagnostics::call_id(call),
+        operation = "cue_ready", ?kind, receivers, bytes = text.len(), elapsed_ms = now_ms().saturating_sub(s.started), "voice diagnostic");
 }
 
 /// The latest replies and notices for the calls `owner` holds, for its catch-up: an app that missed them while it

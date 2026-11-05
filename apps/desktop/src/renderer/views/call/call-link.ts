@@ -1,3 +1,4 @@
+import type { VoiceEndReason } from '@shared/analytics'
 import type { CallLine } from '@shared/calls'
 import { sleep } from '../../store/bot-sync'
 import type { BotStore } from '../../store/bot-store'
@@ -130,10 +131,10 @@ export class CallLink {
   }
 
   /** The call is over: its line in the chat, with what's left of the transcript. */
-  end(seconds: number, after: Promise<void> = Promise.resolve()) {
+  end(seconds: number, after: Promise<void> = Promise.resolve(), reason?: VoiceEndReason) {
     void this.serial(async () => {
       await after
-      await this.store.endCall(this.botId, this.call, seconds, this.drain(true))
+      await this.store.endCall(this.botId, this.call, seconds, this.drain(true), reason)
     })
   }
 

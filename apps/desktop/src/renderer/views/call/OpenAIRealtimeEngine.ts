@@ -132,7 +132,11 @@ export class OpenAIRealtimeEngine extends VoiceEngine {
     const live = isLiveModel(this.model)
       ? new OpenAILiveSession(this.link,
         (event) => { if (this.pc === pc) this.send(event) },
-        (message) => { if (this.pc === pc && !this.ended) this.fail(message, 'provider') })
+        (message, detail) => {
+          if (this.pc !== pc || this.ended) return
+          this.failureDetail = detail
+          this.fail(message, detail === 'host_rpc' || detail === 'queue_full' ? 'connection' : 'provider')
+        })
       : null
     this.live = live
     const offer = await pc.createOffer()

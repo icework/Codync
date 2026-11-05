@@ -30,6 +30,8 @@ struct Session {
     id: String,
     epoch: i64,
     protocol: Protocol,
+    heard_user: bool,
+    heard_voice: bool,
 }
 
 impl Calls {
@@ -162,6 +164,8 @@ pub async fn start(hub: &Arc<Hub>, b: &Value, owner: &str) -> Result<Value> {
     }
     session.id.clone_from(&id);
     session.epoch = epoch;
+    session.heard_user = false;
+    session.heard_voice = false;
     super::announce::watch(hub, call, bot);
     Ok(json!({"sessionId": id, "sdp": answer}))
 }
@@ -180,6 +184,12 @@ pub async fn event(hub: &Arc<Hub>, b: &Value, owner: &str) -> Result<Value> {
     let events = match action {
         Action::None => vec![],
         Action::Transcript { speaker, text, start_ms, end_ms } => {
+            let heard = if speaker == Speaker::User { &mut session.heard_user } else { &mut session.heard_voice };
+            if !*heard {
+                *heard = true;
+                tracing::info!(target: "codync_host::voice_diagnostics", call = super::diagnostics::call_id(call), stage = if speaker == Speaker::User { "first_input_transcript" } else { "first_output_transcript" },
+                    elapsed_ms = now_ms().saturating_sub(session.epoch), "voice diagnostic");
+            }
             let _one = STATE.locked();
             let mut s = owned(hub, call, owner, Some(id))?;
             s.last = now_ms();

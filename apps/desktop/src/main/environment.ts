@@ -6,6 +6,7 @@ import { environmentProfile } from '../shared/environment'
 
 interface BuildConfig {
   environment: 'main' | 'dev'
+  updateChannel?: 'official' | 'personal'
   clerkPublishableKey: string | null
   cloudURL: string | null
 }

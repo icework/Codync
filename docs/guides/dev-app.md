@@ -2,7 +2,7 @@
 
 Codync Dev uses the same source as Codync, with a separate installed identity and local state. Production identifiers and storage locations remain unchanged. Do not copy production credentials, host identity keys, databases or paired devices into Dev; sign in and pair test devices independently.
 
-On `codex/personal`, the macOS Dev app keeps the original Codync mark with a mint **DEV** badge. Production and other platforms retain their upstream icons. The installed name **Codync Dev** distinguishes the development app. See [personal build maintenance](personal-build.md) for this fork’s local installation and daily updates.
+Both variants use the original Codync icon. The installed name **Codync Dev** distinguishes the development app. This fork also provides a [personal production build](personal-build.md) with a mint P badge; it retains the main identity and data and is separate from Dev isolation.
 
 Desktop development and builds on macOS generate SF Symbols automatically, including the Apple sign-in logo. Packaging rejects a macOS build without the Apple logo assets; a fresh worktree does not need a separate `npm run icons` step.
 

@@ -98,13 +98,25 @@ impl Environment {
             self == Self::Main,
             "Codync Dev does not install production updates; rebuild the development app"
         );
-        Ok(())
+        require_update_channel(option_env!("CODYNC_UPDATE_CHANNEL"))
     }
+}
+
+fn require_update_channel(channel: Option<&str>) -> anyhow::Result<()> {
+    anyhow::ensure!(channel != Some("personal"), "This personal build is updated by its managed deployment job");
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::Environment::{Dev, Main};
+
+    #[test]
+    fn personal_builds_refuse_official_updates() {
+        assert!(super::require_update_channel(Some("personal")).is_err());
+        assert!(super::require_update_channel(None).is_ok());
+        assert!(super::require_update_channel(Some("official")).is_ok());
+    }
 
     #[test]
     fn development_cannot_replace_production_resources() {
@@ -127,6 +139,6 @@ mod tests {
             assert_ne!(main, dev);
         }
         assert!(Dev.require_release_updates().is_err());
-        assert!(Main.require_release_updates().is_ok());
+        assert_eq!(Main.require_release_updates().is_ok(), option_env!("CODYNC_UPDATE_CHANNEL") != Some("personal"));
     }
 }

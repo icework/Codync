@@ -8,8 +8,8 @@ import { updaterFixture } from './test-support/updater.ts'
 
 const release = { version: '2.11.3' }
 
-for (const options of [{ packaged: false }, { main: false }]) {
-  test(`development builds never check, download or install: ${JSON.stringify(options)}`, async () => {
+for (const options of [{ packaged: false }, { main: false }, { personal: true }]) {
+  test(`externally managed builds never check, download or install: ${JSON.stringify(options)}`, async () => {
     const f = updaterFixture(options)
     f.updates.check()
     await f.emit('update-downloaded', release)
@@ -415,4 +415,10 @@ test('manual installation crosses the native quit boundary after stopping the ho
   await settle()
   assert.equal(closed, true)
   assert.equal(f.calls.install, 1)
+})
+
+
+test('a personal build ignores a stale official installer restart marker', () => {
+  const f = updaterFixture({ personal: true, prefs: { updateInstalling: { version: '2.10.0', at: Date.UTC(2026, 9, 9) } }, shipIt: { request: true, job: 'running' } })
+  assert.equal(f.yieldsToInstall(), false)
 })

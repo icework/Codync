@@ -1,26 +1,26 @@
-# Personal macOS build
+# Personal production builds
 
-Kai's `codex/personal` branch tracks upstream `origin/dev` and is backed up to
-`fork/codex/personal` (`icework/Codync`). `origin` remains `leepokai/Codync`.
-Never push personal changes to upstream `dev` or `main`.
+Kai's `codex/personal` tracks upstream `origin/dev` and is backed up to
+`fork/codex/personal` (`icework/Codync`). Never push personal changes to `origin`.
+The persistent checkout is `/Users/kaiwu/.codex/worktrees/codync-personal/Codync`.
+Keep this worktree; the shared checkout stays on upstream `dev`.
 
-The persistent worktree is `/Users/kaiwu/.codex/worktrees/codync-personal/Codync`.
-The shared checkout `/Users/kaiwu/Projects/Codync` remains on upstream `dev`.
-The installed app is `/Applications/Codync Dev.app`, bundle `com.pokai.Codync.dev`,
-with its host on 19223 and existing data at `~/.codync-dev`. Production stays on
-19222. Never copy production credentials or identities into Dev.
+## Identity and data
 
-## Personal icon and build
+Both Kai's MacBook and `ssh macmini` use `/Applications/Codync.app`, bundle
+`com.pokai.Codync`, the **main** account/cloud environment, host port 19222 and
+launch-agent `com.pokai.codync.host`. Each computer retains its own `~/.codync`,
+`~/Library/Application Support/Codync`, Keychain items, account.bin and pairing
+keys. Never copy any of these between computers or from/to Dev. Inspect the
+actual service environment before each update, including custom CODYNC_HOME.
+Stop on any mismatch instead of initializing a new identity.
 
-`apps/desktop/resources/PersonalAppIcon.icon` preserves the upstream mark and
-adds a vector mint DEV badge. Only the macOS Dev packaging override selects it.
-This is a personal macOS distribution distinction, not an in-app UI change:
-iOS, Android, Linux, Windows and the terminal keep their existing behavior and
-icons. A future upstream mark change should update the copied mark too.
+The personal app retains the Codync name and adds a mint **P** icon badge.
+Only `tools/personal-builder.cjs` selects that icon. Other platforms and Dev
+retain their upstream packaging and behavior. No application UI is forked.
+The copied upstream icon mark must be refreshed if the upstream mark changes.
 
-Use the upstream build pipeline with this Mac's installed Apple Development
-identity supplied at packaging time (not committed). The upstream npm script
-names the maintainer's signing identity, so override the explicit mac identity:
+## Build and validation
 
 ```sh
 cd apps/desktop
@@ -28,90 +28,123 @@ export PATH="$HOME/.cargo/bin:$PATH"
 npm ci
 npm run typecheck
 npm test
-# The upstream Dev script does not build this optional speech helper.
-# Build it explicitly so the personal app retains on-device dictation.
-swift build -c release --package-path native/speech-macos --scratch-path ../../build/dd/speech-macos
-mkdir -p build/native
-cp ../../build/dd/speech-macos/release/codync-speech build/native/codync-speech
-npm run dist:mac:dev -- --config.mac.identity='<local signing identity>'
+CODYNC_SIGNING_IDENTITY='<valid local Apple signing identity>' node tools/personal-build.mjs
 ```
 
-Find the identity with `security find-identity -v -p codesigning`. Do not publish
-a release or change the upstream release workflow. The current version is
-already ahead of the latest release tag; future version changes follow the
-repository rule, once per upstream release, never a daily artificial bump.
+The builder uses main identity/cloud for both app and host, native architecture
+(the two current Macs are arm64), the pinned Rust toolchain, a bundled Screen
+helper and on-device speech helper. Apple intermediate output stays in `build/dd`.
+It uses the fast optimized dev-app Rust profile, not a Dev environment. The
+signing identity stays outside Git. It does not publish a GitHub release.
 
-## Daily update procedure
+The generated account-config has `updateChannel: personal`; the host is compiled
+with `CODYNC_UPDATE_CHANNEL=personal`. Both refuse official release installation,
+including manual/remote requests, so an upstream update cannot overwrite personal
+changes. Official builds keep the existing update path. Preserve production
+login/Keychain state; if macOS requires approval after signing identity changes,
+ask the user to handle that prompt, never reset accounts or Keychain items.
 
-The Codex scheduled task runs daily at 04:00 America/Los_Angeles. It has standing
-authorization to fetch, merge conflict-free upstream updates, validate, commit,
-push the personal branch to the fork, and replace this Mac's Dev app. Keep the
-persistent worktree; do not archive it at the end of a run. Scheduling requires
-the local computer and Codex desktop app to be available.
+Run focused host environment/update tests and applicable checks for upstream
+changes. Follow after-change for our own changes. Run the full desktop Playwright
+suite in an isolated Dev sandbox; the sandbox name must be explicit and identical:
 
-1. Acquire a single-run lock in `~/Library/Application Support/Codync Personal/`.
-   Record the owning PID. Release only a lock owned by this run; inspect a stale
-   lock before recovery. Read the current repository instructions and this guide.
-   Inspect the personal worktree, fork branch and installed receipt. Do not stash,
-   discard, reset or overwrite another task's edits. If the branch is dirty or
-   busy, report that blocker and leave the installed app alone.
-2. Fetch `origin` and `fork`. Fast-forward personal from its fork counterpart only
-   when safe; stop for divergent personal histories. Do not push to `origin`.
-   If origin/dev is already an ancestor of personal and the installed receipt
-   matches the personal commit and bundled hashes, and its required checks are
-   complete, no rebuild is needed. An initial installation awaiting login is not
-   a fully validated deployment.
-3. Create an isolated candidate worktree from personal with the managed worktree
-   tool, then a `codex/sync-<timestamp>` branch. Merge `origin/dev` there. Review the
-   incoming diff, especially packaging, migrations and app/host compatibility.
-   Keep the personal icon and Dev isolation. Use merge, not a history rewrite.
-4. On a conflict, leave personal and the installed app unchanged. Save a conflict
-   report with files, both sides' intent, actual conflicting hunks and affected
-   behavior. Offer: preserve personal behavior while adapting to upstream;
-   adopt upstream behavior and retire the personal override; or defer this update.
-   Recommend an option per conflict. Wait for Kai's decision; never use blanket
-   ours/theirs, force push, or silently discard either side. Preserve the candidate
-   worktree for inspection. If the same unresolved update recurs, reuse the report.
-5. For a clean merge, run desktop typecheck and tests, affected host checks, and
-   applicable checks for other changed modules. Follow after-change for newly
-   authored fixes. Build and run the worktree sandbox and the full Playwright
-   suite. Managed worktrees share the basename `Codync`, so use a unique name
-   in both commands, for example `npm run dev -- --name personal-check --cdp`
-   and `CODYNC_SANDBOX_NAME=personal-check npm run e2e` (use a timestamp suffix
-   for daily candidates). Never reuse a name belonging to another worktree.
-   Missing checks are blockers, not passes. If checks fail, report evidence
-   and keep the installed app and personal branch unchanged. Stop only this run's
-   sandbox after testing.
-6. Before packaging/installing, record the old app/host state, quiesce only the
-   installed Dev variant and wait for it to exit. Never stop production, another
-   worktree, or interrupt active bot turns: defer deployment if Dev is busy.
-   Back up Dev data, desktop settings, launch-agent plist and the previous app
-   (as an archive, not another launchable .app) under the private support folder.
-   Exclude transient sockets from data archives; verify each archive before installation.
-   Use mode 0700 on the backup directory and 0600 on archives. Never write credentials into logs/Git.
-   Apple build output stays under the candidate's `build/dd`.
-7. Package with the local signing identity; on build failure restart the previous
-   Dev service/app and report failure. Check signature, Dev bundle/environment,
-   icon and bundled host. Confirm personal has not moved since step 3, then
-   fast-forward personal to the validated candidate and push **only**
-   `fork codex/personal`. A failed push blocks installation; restore the old
-   running app if it was stopped, retain the candidate and explain the failure.
-8. Replace the entire installed bundle as in [development](development.md#replace-an-installed-macos-build-completely).
-   Run its new bundled host's `install --port 19223`, launch the app and verify
-   `/health` version, environment, binary path and SHA-256, plus the connected
-   main screen using Computer Use. Keep the Dock item pointing at the fixed app
-   path. The Dock badge is part of the signed bundle, not a fragile Finder override.
-9. On installation/startup failure, stop only the failed Dev variant and restore
-   the previous bundle/service. Data migrations need the matching pre-update data
-   backup; do not run an older binary on migrated data. Report deployed failure
-   separately from Git merge success. Do not claim an unverified rollback succeeded.
-10. On success, atomically write a local `installed.json` receipt in the support
-    folder with personal/upstream commits, version, installed path, host SHA-256,
-    timestamp and check results. Record a timestamped Chinese run report. Clean
-    up only this run's temporary worktree/processes after successful push and
-    verification. Retain the persistent personal worktree, latest build and latest
-    known-good rollback archive. Avoid duplicate launchable app bundles.
+```sh
+CODYNC_CLERK_PUBLISHABLE_KEY='' CODYNC_CLOUD_URL='' CODYNC_HOST_BIN='<dev host>' npm run dev -- --name personal-check --cdp
+CODYNC_SANDBOX_NAME=personal-check npm run e2e
+```
 
-The merge, validation and deployment are distinct outcomes. A failed deployment
-may leave the branch ahead of the running app; the receipt makes that visible and
-the next run must retry deployment rather than declaring no changes.
+This uses the existing local-only mode without borrowing real login credentials.
+Cloud account tests explicitly skip with cloud off; report that skip, and verify
+real account restoration and MCP separately on each production app. Use the
+normal authenticated sandbox with `--cloud` when testing cloud/account behavior;
+that requires the development test-account configuration. Do not change tests to
+hide failures. Do not package/build into the same output while E2E is running.
+Stop only this run's sandbox before packaging; never prune other sandboxes.
+
+## Daily pipeline: MacBook first, then Mac mini
+
+Codex automation `codync-personal` runs at 04:00 America/Los_Angeles. It has
+standing authorization to fetch, merge conflict-free upstream changes, test,
+push the personal branch to the fork, and sequentially update these two Macs.
+The local computer and Codex app must be running. No update may interrupt an
+active bot turn. Git success, MacBook deployment and Mac mini deployment are
+separate states, each recorded in a local receipt and timestamped Chinese report.
+
+1. Acquire a single-run lock under `~/Library/Application Support/Codync Personal`.
+   Record the owning PID and release only your own lock. Inspect a stale lock
+   before recovery. Read this guide and current repository instructions. Inspect
+   dirty worktrees, running tasks, upstream/fork refs and both installed receipts.
+   Preserve other work; do not autostash/reset personal or rewrite its history.
+2. Fetch origin/fork. Update personal from its fork counterpart only by safe
+   fast-forward; divergent personal history is a blocker. Create an isolated
+   candidate worktree/branch, then **merge** `origin/dev`. Never force-push.
+3. For conflicts, preserve the current apps and personal branch. Keep the candidate
+   and write a report identifying files, both sides' intent, affected behavior and
+   concrete options: retain/adapt personal changes; adopt upstream and retire the
+   override; or defer. Recommend per conflict and wait for Kai's decision. Do not
+   use blanket ours/theirs or silently discard either side. Reuse an existing
+   unresolved candidate/report instead of creating one every day.
+4. Review incoming migrations, main cloud availability, phone/host compatibility,
+   personal updater guards and icon. Run applicable tests and sandbox E2E. A failed
+   check blocks rollout. A skip for an unrelated platform is recorded explicitly;
+   real production account and MCP checks are mandatory. No upstream change and
+   matching fully verified receipts on BOTH machines means no rebuild. If only
+   Mac mini is behind, retry its deployment of the already accepted artifact.
+5. Record each machine's environment, app/version, host path/hash, computer ID
+   hash, identity/token hashes, cloud owner hash and MCP settings. Save counts
+   and stable IDs/configurations of bots, all existing chat entry IDs/content,
+   paired devices, and account.bin hash. Never log credentials or conversation
+   content. Read /health busy; defer if true. Check available space and SSH.
+6. Before stopping the old app, inspect `com.pokai.Codync.ShipIt` and its
+   `~/Library/Caches/com.pokai.Codync.ShipIt/ShipItState.plist` request. A live
+   official installer or genuinely pending update blocks replacement: let it
+   finish and re-audit, never kill an installer mid-swap. A proven stale request
+   (source bundle absent and no running job) may be moved into the private backup
+   and its idle launchd job removed. Recheck after app exit and immediately before
+   copying the new bundle; an old app can schedule its staged update on Quit.
+   On the MacBook, quit the old app and stop only its production host before
+   rebuilding. Preserve the production Screen service settings. Back up the whole
+   app as a non-launchable archive, host data, desktop settings and launch-agent
+   plist locally. Exclude sockets; preserve symlinks and permissions. Make a
+   consistent SQLite snapshot and verify integrity/archive readability. Keep
+   backup directories 0700 and archives 0600. No private data goes to Git.
+7. Build the candidate with the local signing identity. On failure restore/start
+   the previous MacBook app/service. Verify signature, main environment, P icon,
+   bundled speech/Screen helpers and **both** personal updater guards before
+   replacement. Confirm personal hasn't moved; fast-forward and push only
+   `fork codex/personal`. Any failure after stopping the old service but before replacement, including
+   push failure, must restart the previous app/host and verify recovery before
+   reporting. Keep the candidate for retry.
+8. Replace the whole MacBook bundle; don't merge directories. Explicitly run the
+   new `/Applications/Codync.app/Contents/Resources/codync-host install --port 19222`.
+   Launch the app; check main screen, original account, original bots/history,
+   health environment/path/hash and updater exclusion. Compare saved data/identity
+   evidence. Verify MCP list_computers and a host-routed list_bots/read_replies.
+   Preserve bot-level assistant visibility; never broaden it to make a test pass.
+   The user authorized MCP connectivity on both computers; the initial MacBook
+   Cloud assistants switch was off and can be enabled for its existing account.
+9. **Only after MacBook acceptance**, package that exact signed app, checksum it,
+   transfer the artifact (never data) to Mac mini, and verify checksum/architecture.
+   Recheck mini idle state and collect its own backup on the mini. Stop its old
+   app/host, replace the app, install the bundled host and launch it. Verify the
+   same health/identity/data/account checks and actual MCP host roundtrip. Check
+   its UI via the existing Screen Sharing connection. A local health check alone
+   is insufficient. Keep both machines on the same accepted commit.
+10. On either machine's failure, stop rollout. Keep the other machine's working
+    version. Restore the failing machine's previous app/service; database migrations
+    require the corresponding pre-update data snapshot before starting an older
+    binary. Preserve failed-state data for diagnosis; never overwrite new user
+    conversations. Report an unverified rollback as incomplete. MacBook failure
+    must never trigger a Mac mini update.
+11. Record per-machine receipts (commit, upstream commit, artifact/host hashes,
+    environment, time, backup location and individual check outcomes), atomically
+    under that machine's private support directory. Include incomplete/pending
+    states; never turn a partial deployment into a no-op next day. Keep one
+    known-good rollback archive, the latest build, and the permanent worktree.
+    Archive only this run's temporary managed worktree after successful handoff.
+
+A UI check should be read-only against existing production bots. Never run the
+mutating Playwright suite against production data. A message-based MCP check
+requires explicit authorization; read-only host-routed calls suffice for normal
+post-update acceptance. Cloud assistants use account authorization AND the host's
+own identity/registration/switch; the same login alone does not prove connectivity.

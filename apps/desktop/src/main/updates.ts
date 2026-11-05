@@ -7,7 +7,7 @@ import { app, BrowserWindow, ipcMain, powerMonitor, shell } from 'electron'
 import electronUpdater, { type UpdateInfo } from 'electron-updater'
 import type { UpdateState } from '../shared/ipc'
 import { isMainEnvironment } from './account'
-import { identity } from './environment'
+import { buildConfig, identity } from './environment'
 import { prefs, type HostController } from './host-controller'
 
 const { autoUpdater } = electronUpdater
@@ -18,7 +18,7 @@ const { autoUpdater } = electronUpdater
  * coordinates its background services before the installer replaces the app: the host is
  * stopped first, and a restart marker makes the next launch reinstall it from the new bundle.
  */
-const enabled = app.isPackaged && isMainEnvironment()
+const enabled = app.isPackaged && isMainEnvironment() && buildConfig.updateChannel !== 'personal'
 const shipIt = `${identity.appId}.ShipIt`
 
 const bundlePath = () => join(app.getPath('exe'), '../../..')
@@ -33,6 +33,7 @@ const REQUEST_WAIT = 10 * 60_000
  * the new release after an install, this one after a failed attempt.
  */
 export function yieldsToInstall(): boolean {
+  if (!enabled) return false
   const pending = prefs.get('updateInstalling') as { version: string; at: number } | undefined
   if (!pending) return false
   const installing = pending.version !== app.getVersion() && Date.now() - pending.at < 120_000 && shipItRunning()

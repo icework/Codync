@@ -5,6 +5,10 @@ A client and a host on versions that can't work together say which one to update
 
 ## Desktop app
 
+This fork’s [personal production build](personal-build.md) disables official app
+and host updates. Its daily job validates the MacBook first, then updates Mac mini,
+while preserving each machine’s production account, identity and data.
+
 Release builds update through electron-updater from GitHub releases
 (`apps/desktop/src/main/updates.ts`). Open **Settings → Updates** in the menu bar
 to check for a release, turn scheduled checks off, or turn off automatic downloads

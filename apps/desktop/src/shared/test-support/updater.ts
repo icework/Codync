@@ -13,7 +13,7 @@ interface UpdatesInstance extends EventEmitter {
 
 type ShipIt = { request: boolean; job: 'none' | 'idle' | 'running' }
 
-export function updaterFixture(options: { packaged?: boolean; main?: boolean; prefs?: Record<string, unknown>; shipIt?: ShipIt } = {}) {
+export function updaterFixture(options: { packaged?: boolean; main?: boolean; personal?: boolean; prefs?: Record<string, unknown>; shipIt?: ShipIt } = {}) {
   const calls = { check: 0, download: 0, install: 0, prepare: 0, resume: 0, quit: 0 }
   // macOS's installer job: whether its update request exists, and its launchd state.
   const shipIt = { ...(options.shipIt ?? { request: true, job: 'idle' }), removed: 0 }
@@ -83,7 +83,7 @@ export function updaterFixture(options: { packaged?: boolean; main?: boolean; pr
     electron: { app, ipcMain: ipc, shell: { openPath: async (target: string) => { opened.push(target); return '' } }, BrowserWindow: { getFocusedWindow: () => behavior.focused }, powerMonitor: { getSystemIdleTime: () => behavior.idleSeconds } },
     'electron-updater': { autoUpdater: updater },
     './account': { isMainEnvironment: () => options.main ?? true },
-    './environment': { identity: { appId: 'com.pokai.Codync' } },
+    './environment': { identity: { appId: 'com.pokai.Codync' }, buildConfig: { updateChannel: options.personal ? 'personal' : 'official' } },
     './host-controller': { prefs: { get: (key: string) => preferences.get(key), set: (key: string, value: unknown) => preferences.set(key, value) } },
   }, {
     Date: class extends Date { static override now() { return now } },

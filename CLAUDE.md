@@ -4,7 +4,7 @@ Bot-based remote for coding agents: persistent named bots on your computer, mess
 
 ## Personal workflow takes precedence
 
-Follow [AGENTS.md personal branch rules](AGENTS.md#personal-branch-rules-override-upstream-workflow-below): every personal task branches from `codex/personal` in a separate worktree, merges back to personal and pushes only to `fork`. Never rebase personal history or push it to `origin`. Preserve compatibility with Kai's upstream production mobile app; [personal-build.md](docs/guides/personal-build.md#production-mobile-compatibility-gate) governs acceptance and overrides upstream floor-raising/legacy-removal rules.
+Follow [AGENTS.md personal branch rules](AGENTS.md#personal-branch-rules-override-upstream-workflow-below): every personal task branches from `codex/personal` in a separate worktree, merges back to personal and pushes only to `fork`. Never rebase personal history or push it to `origin`. Preserve compatibility with the latest available upstream production mobile release (Kai keeps it updated); [personal-build.md](docs/guides/personal-build.md#production-mobile-compatibility-gate) governs acceptance and overrides upstream floor-raising/legacy-removal rules.
 
 ## Language & Syntax
 

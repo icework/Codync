@@ -44,11 +44,19 @@ supported combination, not a requirement to install a personal mobile build.
 The Mac personal app uses the **main** cloud/account environment; an isolated
 Codync Dev sandbox is a different environment and is not a production phone host.
 
-- Record the actual phone app version/build Kai uses and the upstream store release
-  being checked, with dated evidence. Do not silently replace the installed-client
-  baseline with a newer store version. Unknown phone versions or unavailable device
-  tests are `pending`, not compatible. Do not demand phone upgrades to ship personal
-  features; if a baseline cannot be supported, stop and explain options to Kai.
+- The baseline follows upstream production iOS; Kai will keep the phone app updated
+  (confirmed 2026-11-05). Use the upstream repository's iOS source at the release
+  tag/commit corresponding to the latest available production App Store version,
+  not a permanently pinned installed phone version or unreleased `origin/dev` HEAD.
+  Record that version, source commit and dated release evidence for each affected
+  validation. Routine maintenance does not require asking Kai for the phone version.
+- A repository tag or newer `origin/main` commit alone does not prove the iOS app is
+  available in the store. If a candidate requires an unreleased mobile change, keep
+  the currently released contract or defer deployment until that mobile release is
+  available and compatibility passes. Check upstream iOS changes proactively, but
+  do not treat tests against unreleased source as production-client acceptance.
+  Unavailable required tests remain `pending`; if compatibility cannot be maintained,
+  stop and explain options to Kai.
 - Preserve the baseline's pairing certificates, encrypted handshake, cloud routing,
   RPC names/request defaults, response types, enum handling, SSE catch-up and event
   decoding. Add fields/methods compatibly; keep old request forms and behavior where
@@ -85,8 +93,9 @@ Codync Dev sandbox is a different environment and is not a production phone host
 As of source `c18c2a3039baea9a5ac4199f851147e92127ae03` (2026-11-05),
 `host/src/compat.rs` declares `MIN_APP = 2.36.0`. This is a code-level floor,
 not evidence that Kai's installed iOS build passed a real-device acceptance test.
-The actual phone version and production-mobile E2E remain unverified at this
-policy's introduction; retain that gap until concrete evidence resolves it.
+Production-mobile E2E remains unverified at this policy's introduction; retain
+that gap until concrete evidence resolves it. Kai's installed phone version is
+not a separate pinned baseline or a routine maintenance blocker.
 
 ## Identity and data
 

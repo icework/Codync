@@ -4,7 +4,7 @@
 
 - All personal features, fixes and task changes start from current `codex/personal`, on a separate `codex/<task>` branch in its own worktree. Implement, build and test there; merge accepted changes back into `codex/personal`. Never start personal work from `dev`/`main` or develop in the permanent production checkout.
 - Fetch `origin` and `fork`; integrate upstream `origin/dev` by merge in a candidate worktree. Push personal work only to `fork` (`icework/Codync`), never `origin`; no rebase/autostash of personal history or force push. Upstream contribution/release instructions below are not authorization to publish personal changes upstream.
-- Upstream production iOS/mobile apps must keep working with both personal Macs. Preserve existing protocol/authentication/pairing and flows; new client-only features stay optional. Compatibility evidence is a deployment gate, not a promise based on matching accounts or version numbers. Follow [personal workflow and mobile gate](docs/guides/personal-build.md#personal-feature-workflow).
+- The latest available upstream production iOS/mobile release is the moving compatibility baseline (Kai keeps it updated) and must keep working with both personal Macs. Preserve existing protocol/authentication/pairing and flows; new client-only features stay optional. Compatibility evidence is a deployment gate, not a promise based on matching accounts or version numbers. Follow [personal workflow and mobile gate](docs/guides/personal-build.md#personal-feature-workflow).
 
 ## Project Structure & Module Organization
 

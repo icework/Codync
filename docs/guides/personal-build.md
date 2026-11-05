@@ -27,7 +27,7 @@ cd apps/desktop
 export PATH="$HOME/.cargo/bin:$PATH"
 npm ci
 npm run typecheck
-npm test
+# Select focused tests or the full suite using the validation tiers below.
 CODYNC_SIGNING_IDENTITY='<valid local Apple signing identity>' node tools/personal-build.mjs
 ```
 
@@ -44,9 +44,10 @@ changes. Official builds keep the existing update path. Preserve production
 login/Keychain state; if macOS requires approval after signing identity changes,
 ask the user to handle that prompt, never reset accounts or Keychain items.
 
-Run focused host environment/update tests and applicable checks for upstream
-changes. Follow after-change for our own changes. Run the full desktop Playwright
-suite in an isolated Dev sandbox; the sandbox name must be explicit and identical:
+Use the validation tiers below for upstream maintenance. Follow after-change for
+our own source changes. Run selected desktop Playwright tests in an isolated Dev
+sandbox (the full suite for weekly/expanded validation); the sandbox name must be
+explicit and identical:
 
 ```sh
 CODYNC_CLERK_PUBLISHABLE_KEY='' CODYNC_CLOUD_URL='' CODYNC_HOST_BIN='<dev host>' npm run dev -- --name personal-check --cdp
@@ -60,6 +61,68 @@ normal authenticated sandbox with `--cloud` when testing cloud/account behavior;
 that requires the development test-account configuration. Do not change tests to
 hide failures. Do not package/build into the same output while E2E is running.
 Stop only this run's sandbox before packaging; never prune other sandboxes.
+
+## Validation tiers
+
+Kai requested daily lightweight checks and weekly full regression on 2026-11-04.
+This policy applies to personal deployment maintenance, not upstream release CI.
+
+### Daily: focused validation before deployment
+
+- Fetch and compare refs/receipts first. With no new shipped code and matching
+  installed hashes, do not create a build worktree, rebuild, reinstall or restart.
+  Check both hosts' health/cloud status and read-only MCP connectivity, then exit.
+  Documentation-only merges can advance the branch without an app rebuild; record
+  `reviewedCommit`/`reviewedUpstreamCommit` separately from the actual installed
+  source commit. Compare relevant source, dependency and build-config diffs.
+- For ordinary updates, review the entire incoming diff, select tests for affected
+  modules, typecheck changed desktop code, and run a small isolated app smoke test
+  (launch, bot list/history, and the changed flow). Run focused Rust tests and fmt
+  when host code changes. Reuse valid dependency caches; run npm ci when needed
+  by lockfile/toolchain/cache changes, not unconditionally. Do not run full unit
+  suites or all-target clippy on every ordinary update.
+- Preserve the deployment gates below: idle checks, local backups, signing and
+  updater guards, each machine's identity/account/data integrity, and host-routed
+  MCP calls. Accept the MacBook before deploying the exact same artifact to Mini.
+- Routine daily production acceptance uses installed hashes, process/health,
+  cloud owner/registration, original data and MCP evidence. Full production UI
+  walkthroughs belong to weekly validation. Record `validationTier: daily` and
+  `accountUI: deferred_to_weekly`; never label an unobserved UI as passed.
+  A previous UI-tool-only timeout is retained as pending for the weekly check,
+  not a reason to reinstall. Actual login failures or product failures block
+  rollout. Only retry an unavailable UI tool once (roughly 60 seconds total).
+- Expand to the full checks **before deployment**, even on a weekday, for changes
+  to database schemas/migrations, account/authentication/Keychain/identity,
+  cloud/MCP transport or compatibility, updater guards, signing/packaging,
+  dependency/toolchain security, broad desktop-main/process lifecycle behavior,
+  or when the focused checks fail or leave a concrete unresolved concern. Also
+  verify affected real production UI before Mini rollout in these cases; a tool
+  outage is pending, never a passed required check. Do not defer these gates.
+
+### Weekly: full regression, without routine production reinstall
+
+Automation `codync` runs Sundays at 05:00 America/Los_Angeles using the same
+single-run lock as daily (`codync-personal`).
+If the daily run still owns the lock, defer; never overlap or steal a live lock.
+Test the currently deployed personal source in an isolated worktree/sandbox;
+record exact tested commit, toolchain and artifact hashes. If machines differ,
+report that discrepancy and leave deployment recovery to the daily flow.
+
+Run desktop typecheck and the entire unit/Playwright suites, host fmt, all-target
+clippy and full cargo tests. Walk through both real production apps read-only
+(original account, bot list, existing history, settings), verify both routed MCP
+calls, database integrity, and backup archive readability. Test restore using a
+private temporary database copy, never over live production data. Build/test the
+current source as needed in the sandbox; do not stop, rebuild or reinstall the
+production apps just to run regression. Other platforms use existing test
+environments only when affected/applicable; report unavailable coverage honestly.
+
+Write `weekly-verification.json` in the private support directory, with tested
+commit, checks, timestamps, pending UI checks and status `passed`, `failed`, or
+`pending`. A real regression blocks subsequent deployment until resolved; a tool
+outage is not a product failure and does not erase earlier pending checks. Never
+reuse weekly results for a different source revision. Keep reports concise and
+record individual step durations to measure whether the daily path is faster.
 
 ## Daily pipeline: MacBook first, then Mac mini
 
@@ -85,10 +148,12 @@ separate states, each recorded in a local receipt and timestamped Chinese report
    use blanket ours/theirs or silently discard either side. Reuse an existing
    unresolved candidate/report instead of creating one every day.
 4. Review incoming migrations, main cloud availability, phone/host compatibility,
-   personal updater guards and icon. Run applicable tests and sandbox E2E. A failed
+   personal updater guards and icon. Select the validation tier above and run its
+   applicable tests and sandbox E2E. Check the latest weekly report. A failed
    check blocks rollout. A skip for an unrelated platform is recorded explicitly;
    real production account and MCP checks are mandatory. No upstream change and
-   matching fully verified receipts on BOTH machines means no rebuild. If only
+   matching daily acceptance receipts on BOTH machines means no rebuild; pending
+   weekly-only UI checks remain recorded separately. If only
    Mac mini is behind, retry its deployment of the already accepted artifact.
 5. Record each machine's environment, app/version, host path/hash, computer ID
    hash, identity/token hashes, cloud owner hash and MCP settings. Save counts
@@ -117,9 +182,10 @@ separate states, each recorded in a local receipt and timestamped Chinese report
    reporting. Keep the candidate for retry.
 8. Replace the whole MacBook bundle; don't merge directories. Explicitly run the
    new `/Applications/Codync.app/Contents/Resources/codync-host install --port 19222`.
-   Launch the app; check main screen, original account, original bots/history,
+   Launch the app; check original account, original bots/history,
    health environment/path/hash and updater exclusion. Compare saved data/identity
-   evidence. Verify MCP list_computers and a host-routed list_bots/read_replies.
+   evidence. Perform production UI checks when required by the validation tier.
+   Verify MCP list_computers and a host-routed list_bots/read_replies.
    Preserve bot-level assistant visibility; never broaden it to make a test pass.
    The user authorized MCP connectivity on both computers; the initial MacBook
    Cloud assistants switch was off and can be enabled for its existing account.
@@ -128,7 +194,8 @@ separate states, each recorded in a local receipt and timestamped Chinese report
    Recheck mini idle state and collect its own backup on the mini. Stop its old
    app/host, replace the app, install the bundled host and launch it. Verify the
    same health/identity/data/account checks and actual MCP host roundtrip. Check
-   its UI via the existing Screen Sharing connection. A local health check alone
+   its UI via the existing Screen Sharing connection when required by the tier.
+   A local health check alone
    is insufficient. Keep both machines on the same accepted commit.
 10. On either machine's failure, stop rollout. Keep the other machine's working
     version. Restore the failing machine's previous app/service; database migrations

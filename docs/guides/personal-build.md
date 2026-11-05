@@ -5,6 +5,89 @@ Kai's `codex/personal` tracks upstream `origin/dev` and is backed up to
 The persistent checkout is `/Users/kaiwu/.codex/worktrees/codync-personal/Codync`.
 Keep this worktree; the shared checkout stays on upstream `dev`.
 
+## Personal feature workflow
+
+These rules govern Kai's personal branch and all task branches derived from it.
+They override upstream instructions to start from/merge into `dev`, rebase with
+an autostash, push to `origin`, or remove older mobile contracts by raising a floor.
+
+1. Fetch `origin` and `fork`, inspect status and refs, and preserve others' work.
+   The base is current accepted `codex/personal`, not `origin/dev`, `main` or an
+   old feature branch. If the fork is ahead, reconcile it safely first; stop on
+   divergence. Fetch does not authorize deploying incoming upstream changes.
+2. Every feature (including small ones), fix and documentation task uses a separate
+   `codex/<task>` branch and worktree based on that personal commit. Use the managed
+   worktree tool when available. Show `pwd`, branch and base commit before edits.
+   The permanent personal checkout is for integration/maintenance, not feature work.
+3. Implement, build and test in that worktree, with a unique sandbox and matching
+   `--name` / `CODYNC_SANDBOX_NAME`; never use production data in mutable tests.
+   Apply the normal review/after-change requirements to source changes. Documentation
+   changes need diff/link checks, not a production rebuild or app restart.
+4. Before integration, inspect the complete change against latest personal. If it
+   moved, merge personal into the task branch, review conflicts and rerun affected
+   checks. Do not rebase published personal/task history. Conflicts follow the
+   stop-and-offer-options policy in the daily pipeline.
+5. Under the shared update lock, recheck the personal tip and clean status, then
+   fast-forward personal to the accepted task (or use a reviewed merge if needed).
+   Push only `fork codex/personal`; optional task backups also go only to `fork`.
+   Do not push `origin`, force-push, tag a public release or deploy the cloud as a
+   side effect. Archive only this task's worktree after successful integration.
+6. Source integration is not production deployment. Deploy using the MacBook-first,
+   same-artifact-to-Mini pipeline below. Documentation-only commits change the
+   reviewed source, never the recorded installed source or installed artifact hash.
+
+## Production mobile compatibility gate
+
+Kai may keep using the upstream **production iOS app**, and upstream production
+Android when applicable, while the MacBook and Mini run personal code. This is a
+supported combination, not a requirement to install a personal mobile build.
+The Mac personal app uses the **main** cloud/account environment; an isolated
+Codync Dev sandbox is a different environment and is not a production phone host.
+
+- Record the actual phone app version/build Kai uses and the upstream store release
+  being checked, with dated evidence. Do not silently replace the installed-client
+  baseline with a newer store version. Unknown phone versions or unavailable device
+  tests are `pending`, not compatible. Do not demand phone upgrades to ship personal
+  features; if a baseline cannot be supported, stop and explain options to Kai.
+- Preserve the baseline's pairing certificates, encrypted handshake, cloud routing,
+  RPC names/request defaults, response types, enum handling, SSE catch-up and event
+  decoding. Add fields/methods compatibly; keep old request forms and behavior where
+  required. A new enum value is only safe if that released client's decoder accepts
+  it. Account identity alone does not establish protocol compatibility.
+- Check both floors: host `minApp` must admit the baseline mobile version, and the
+  personal host version must meet that client's `minHost`. Never falsify versions
+  or lower `MIN_APP` without restoring and testing the corresponding contracts.
+  Unlike official releases, local personal installation bypasses the upstream
+  App Store release gate: run this gate explicitly on every affected deployment.
+- New capabilities must be opt-in or negotiated, with existing behavior retained
+  for old clients. For example, a released phone without GPT Live UI/audio support
+  must retain its existing chat and voice paths; installing GPT Live on the Mac
+  cannot add phone-side controls or WebRTC/audio handling to that phone app.
+- For every candidate review the full deployed-to-candidate diff for mobile impact,
+  including incoming upstream code. When protocol/auth/cloud/voice behavior or a
+  compatibility floor changes, use expanded validation before deployment: run the
+  relevant host contract/wire-shape tests and test the released baseline client
+  against an isolated candidate host using synthetic data. New-client tests alone
+  do not prove compatibility with the released app; wire snapshots do not cover
+  all requests or response variants. Inspect/test affected released decoders too.
+- Acceptance covers connection/reconnection, bot list, history/catch-up, sending and
+  receiving, approval responses and the existing voice path when affected. Mutating
+  tests use disposable test bots/data; do not send production bot messages or alter
+  visibility merely to validate. After deployment, check existing phone pairing and
+  read-only connection/history on MacBook, then Mini. Preserve both Macs' own data.
+- Record client version/build, host commit/hash, routes and checks, evidence/time,
+  and `passed` / `failed` / `pending` in the acceptance report/receipt. Affected
+  compatibility checks that fail or remain pending block deployment to either Mac;
+  missing phone tools are not a reason to waive the gate. Unchanged contracts may
+  reuse applicable prior evidence with an explicit diff review; routine no-update
+  daily checks do not rebuild/reinstall or require a fresh phone test every day.
+
+As of source `c18c2a3039baea9a5ac4199f851147e92127ae03` (2026-11-05),
+`host/src/compat.rs` declares `MIN_APP = 2.36.0`. This is a code-level floor,
+not evidence that Kai's installed iOS build passed a real-device acceptance test.
+The actual phone version and production-mobile E2E remain unverified at this
+policy's introduction; retain that gap until concrete evidence resolves it.
+
 ## Identity and data
 
 Both Kai's MacBook and `ssh macmini` use `/Applications/Codync.app`, bundle
@@ -147,7 +230,8 @@ separate states, each recorded in a local receipt and timestamped Chinese report
    override; or defer. Recommend per conflict and wait for Kai's decision. Do not
    use blanket ours/theirs or silently discard either side. Reuse an existing
    unresolved candidate/report instead of creating one every day.
-4. Review incoming migrations, main cloud availability, phone/host compatibility,
+4. Apply the production mobile compatibility gate above. Review incoming migrations,
+   main cloud availability, phone/host compatibility,
    personal updater guards and icon. Select the validation tier above and run its
    applicable tests and sandbox E2E. Check the latest weekly report. A failed
    check blocks rollout. A skip for an unrelated platform is recorded explicitly;

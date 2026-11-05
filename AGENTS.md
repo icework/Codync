@@ -1,5 +1,11 @@
 # Repository Guidelines
 
+## Personal branch rules (override upstream workflow below)
+
+- All personal features, fixes and task changes start from current `codex/personal`, on a separate `codex/<task>` branch in its own worktree. Implement, build and test there; merge accepted changes back into `codex/personal`. Never start personal work from `dev`/`main` or develop in the permanent production checkout.
+- Fetch `origin` and `fork`; integrate upstream `origin/dev` by merge in a candidate worktree. Push personal work only to `fork` (`icework/Codync`), never `origin`; no rebase/autostash of personal history or force push. Upstream contribution/release instructions below are not authorization to publish personal changes upstream.
+- Upstream production iOS/mobile apps must keep working with both personal Macs. Preserve existing protocol/authentication/pairing and flows; new client-only features stay optional. Compatibility evidence is a deployment gate, not a promise based on matching accounts or version numbers. Follow [personal workflow and mobile gate](docs/guides/personal-build.md#personal-feature-workflow).
+
 ## Project Structure & Module Organization
 
 - `host/`: Rust daemon, ACP integration, SQLite storage, HTTP/SSE API, and terminal UI; unit tests live alongside modules in `src/`.
@@ -16,17 +22,7 @@
 
 ## Build, Test, and Development Commands
 
-Run from the repository root unless a command changes directories:
-
-- `xcodegen generate --spec apps/project.yml`: regenerate `apps/Codync.xcodeproj` after editing `apps/project.yml`; never edit `project.pbxproj` directly.
-- Use Xcode’s `iOS Dev` scheme for development and `iOS` for production; see [Dev app isolation](docs/guides/dev-app.md).
-- `cd apps/desktop && npm ci && npm run dev`: run the desktop app while developing and for its e2e check (renderer reloads on save, restart after `src/main` or preload changes; unpackaged, unsigned). In a linked worktree it runs a [sandbox](docs/guides/dev-app.md#worktree-sandboxes) beside the main checkout's Codync Dev; `--sandbox` does the same from the main checkout. In the main checkout, after a host change run `node tools/native-host.mjs dev` there first: `npm run dev` prefers that build over `host/target/debug`. Package `npm run dist:mac:dev` (about 45 s) only for what an unpackaged run lacks (bundled host install, Codync Screen / computer use, system permissions); `dist:*:main` only to check the production app. `npm run typecheck && npm test` for its CI checks.
-- `cd host && cargo build`: build the host; `cargo run -- serve` starts it in the foreground.
-- `cd host && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`: run host CI checks.
-- `cd apps/android && ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug` (JDK 21, Android SDK 37): Android checks; `adb install -r -d app/build/outputs/apk/debug/app-debug.apk` installs Codync Dev.
-- `cd apps/ios/Kit && xcodebuild test -scheme CodyncKit-Package -destination 'platform=iOS Simulator,name=<any iPhone>'`: run the iPhone package tests.
-- `cd cloud && npm ci && npm test && npm run typecheck`: validate the cloud service; see `docs/guides/cloudflare-testing.md` for integration checks.
-- `cd relay && npm ci && npm test && npm run typecheck`: install dependencies and validate the relay.
+Commands: [agent build reference](docs/guides/agent-build-commands.md); personal builds and validation tiers: [personal-build.md](docs/guides/personal-build.md).
 
 ## Installing a new build: kill the old one first
 
@@ -79,7 +75,7 @@ Use Swift Testing (`@Test`, `#expect`), Rust unit tests, `node --test` in the de
 - Every large feature and every bug fix must use its own branch in a separate git worktree, including implementation, builds, tests and app E2E; never do that work in the shared checkout. Use the [worktree sandbox](docs/guides/dev-app.md#worktree-sandboxes) and follow the [handoff and cleanup workflow](docs/guides/clean-code.md#after-every-change-review-e2e-cleanup).
 - After creating or selecting a task worktree, `cd` into it and show `pwd` and `git branch --show-current` so the user can see where the work is happening. Run subsequent task commands from that worktree; tools without a persistent working directory must explicitly set it on every call.
 - Several agents often work in this checkout on `dev` at once. Before touching files with someone else's uncommitted changes, or anything tree-wide (renames, `xcodegen`, version bump, `git stash`/`reset`/`checkout`), tell the other agents what you'll change if your tool can message them; otherwise ask the user first. Never discard, revert or reformat hunks that aren't yours.
-- Before starting any task, sync with origin: `git pull --rebase --autostash origin dev`, then push any finished local commits that aren't on `origin/dev` yet (`git push origin dev`). The pull is tree-wide, so the rule above applies; if the autostash conflicts, keep both sides' intent and never drop another agent's hunk.
+- For personal work, use the personal branch rules above instead of the upstream `pull --rebase --autostash` / `push origin dev` workflow. Protect other agents' changes in every checkout.
 
 ## Commit & Pull Request Guidelines
 

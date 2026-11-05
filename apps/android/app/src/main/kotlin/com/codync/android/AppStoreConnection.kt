@@ -88,6 +88,7 @@ fun AppStore.connect() {
                     }
                     launch {
                         active.state.collectLatest { link ->
+                            voiceReadyChannel = null
                             val iconEpoch = if (link is LinkState.Ready) {
                                 withContext(Dispatchers.IO) { requireNotNull(database).beginIconConnection() }
                             } else null
@@ -111,6 +112,7 @@ fun AppStore.connect() {
                                 // Dropped chats page their earlier messages again.
                                 mutableState.update { it.copy(historyComplete = if (dropped) emptySet() else it.historyComplete) }
                                 noteHello(hello)
+                                voiceReadyChannel = active
                                 if (asksToJoinAccount(hello)) joinAccount { claim ->
                                     active.call("joinAccount", claim.json).jsonObject
                                 }
@@ -224,9 +226,15 @@ private suspend fun AppStore.awaitUpdate(active: EncryptedChannel) {
 }
 
 /** A different host version may read fine: forget that its data was unreadable and any update asked of the old one (iOS `noteHostVersion`). */
-private fun AppStore.noteHello(hello: JsonObject) = mutableState.update {
-    val same = it.hello?.text("version") == hello.text("version")
-    it.copy(hello = hello, unreadable = it.unreadable && same, hostUpdate = it.hostUpdate.takeIf { same })
+private fun AppStore.noteHello(hello: JsonObject) {
+    val originalHost = voiceBinding?.hostId ?: state.value.hello?.text("hostId")
+    mutableState.update {
+        val same = it.hello?.text("version") == hello.text("version")
+        it.copy(hello = hello, unreadable = it.unreadable && same, hostUpdate = it.hostUpdate.takeIf { same })
+    }
+    if (state.value.voice != null) {
+        voiceHostFailure(originalHost, hello.text("hostId"), state.value.mismatch != null)?.let { endVoice(it) }
+    }
 }
 
 /** The computer's [hello] asks this phone to finish bringing it into the account (iOS `BotStore.refreshHello`). */

@@ -6,12 +6,15 @@ private let log = Logger(subsystem: "com.pokai.Codync", category: "BotStore")
 
 extension BotStore {
     /// Events (catch-up since `rev`, then live) for as long as the link stays ready.
-    func runEvents(_ client: HostClient) async {
+    func runEvents(_ client: HostClient, generation requestedGeneration: UUID? = nil) async {
+        let generation = requestedGeneration ?? clientGeneration
         var backoff: Double = 1
         while !Task.isCancelled {
             do {
-                try await refreshHello(client)
-                guard !Task.isCancelled, !retired else { return }
+                guard generation == clientGeneration else { return }
+                verifiedClientGeneration = nil
+                try await refreshHello(client, generation: generation)
+                guard !Task.isCancelled, !retired, generation == clientGeneration else { return }
                 if mismatch != nil {
                     // Reached, but nothing to sync until one side updates. A host update restarts
                     // the link (and this loop) anyway; this catches one that doesn't.
@@ -22,7 +25,7 @@ extension BotStore {
                 requestedSince = rev
                 windowFloors = [:]
                 for try await event in client.events(since: requestedSince, client: "ios") {
-                    guard !Task.isCancelled, !retired else { return }
+                    guard !Task.isCancelled, !retired, generation == clientGeneration else { return }
                     setConnection(.online)
                     backoff = 1
                     apply(event)
@@ -30,20 +33,23 @@ extension BotStore {
             } catch is CancellationError {
                 return
             } catch {
-                if Task.isCancelled || retired { return }
+                if Task.isCancelled || retired || generation != clientGeneration { return }
+                verifiedClientGeneration = nil
                 log.info("stream ended: \(error.localizedDescription)")
                 if case let HostError.unauthorized(message) = error {
                     setConnection(.unauthorized(message))
                     return
                 }
             }
+            guard generation == clientGeneration else { return }
+            verifiedClientGeneration = nil
             try? await Task.sleep(for: .seconds(backoff))
             backoff = min(backoff * 2, 20)
         }
     }
 
     /// Asked on every (re)connect: the host may have been updated while this app was away.
-    private func refreshHello(_ client: HostClient) async throws {
+    private func refreshHello(_ client: HostClient, generation: UUID) async throws {
         iconsEpoch &+= 1
         let epoch = iconsEpoch
         let h: Hello
@@ -52,20 +58,23 @@ extension BotStore {
         } catch let error as DecodingError {
             // Its version and `minApp` still say which side to update.
             let version: HostVersion = try await client.call("hello")
-            guard !Task.isCancelled, !retired else { return }
+            guard !Task.isCancelled, !retired, generation == clientGeneration else { return }
             log.error("undecodable hello from host \(version.version)")
             noteHostVersion(version)
             Motion.animate { unreadable = true }
             if mismatch == nil { throw error }
             return
         }
-        guard !Task.isCancelled, !retired else { return }
+        guard !Task.isCancelled, !retired, generation == clientGeneration else { return }
         // hello first: whatever the version change shows (notices, reminders) reads it.
         guard epoch == iconsEpoch else { return }
         iconsRevision = -1
         hello = h
+        if let hostId, hostId != h.hostId { resetMirror() }
+        hostId = h.hostId
         applyIcons(h.icons ?? [:], revision: h.iconsRevision ?? 0)
         noteHostVersion(HostVersion(version: h.version, minApp: h.minApp))
+        verifiedClientGeneration = generation
         if h.joinAccount == true { onJoinAccount?(client) }
     }
 
@@ -184,8 +193,10 @@ extension BotStore {
     /// Resubscribes from the current `rev` on the same link.
     private func restartEvents() {
         guard let client, eventsTask != nil else { return }
+        verifiedClientGeneration = nil
+        let generation = clientGeneration
         eventsTask?.cancel()
-        eventsTask = Task { [weak self] in await self?.runEvents(client) }
+        eventsTask = Task { [weak self] in await self?.runEvents(client, generation: generation) }
     }
 
     private func bump(_ r: Int64) {

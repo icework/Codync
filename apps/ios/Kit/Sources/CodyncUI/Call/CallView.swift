@@ -9,6 +9,9 @@ struct CallView: View {
     let botId: String
     @Binding var isSpeaking: Bool
     @Binding var interrupt: (() -> Void)?
+    let start: () -> Bool
+    let showConversation: () -> Void
+    let finished: () -> Void
     let close: () -> Void
     @Environment(BotStore.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -30,6 +33,7 @@ struct CallView: View {
     @State private var transition = 0
     /// Each engine's `voice_call_quality`.
     @State private var quality = CallQuality()
+    @State private var pendingCues = PendingCallCues()
     /// The bot's Live Activity showing the call.
     @State private var activity: CallActivity?
 
@@ -38,6 +42,12 @@ struct CallView: View {
 
     var body: some View {
         VStack(spacing: 6) {
+            Button(action: showConversation) {
+                Text("\(bot?.name ?? "") · \(model.hostName)")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(Palette.secondary)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
             bar
             if case .failed(let message, _) = session?.phase {
                 line(message, color: Palette.danger)
@@ -54,6 +64,7 @@ struct CallView: View {
         .animation(Motion.reduced(Motion.fade, reduceMotion), value: session?.phase)
         .animation(Motion.reduced(Motion.fade, reduceMotion), value: notice)
         .onAppear {
+            guard start() else { return }
             visible = true
             startedAt = .now
             link = CallLink(model: model, botId: botId, call: call)
@@ -62,6 +73,16 @@ struct CallView: View {
                 activity = CallActivity(bot: bot, computerId: model.computer.id, link: model.storage.botURL(ref),
                                         toggleMute: { session?.muted.toggle() }, hangUp: { close() })
             }
+            // The call owns its subscription through connecting, fallback and engine replacement.
+            model.beginVoiceCall(callID, hear: { cue in
+                activity?.heard(cue)
+                guard pendingCues.append(cue) else {
+                    model.lastError = "Voice chat ended because too many replies were waiting for audio. Read the call in chat."
+                    close()
+                    return
+                }
+                flushCues()
+            }, end: { session?.end(); close() })
             begin(cloud: VoiceSettings.provider)
         }
         .onDisappear {
@@ -77,19 +98,21 @@ struct CallView: View {
             model.endVoiceCall(callID)
             quality.report()
             activity?.end()
+            Task { await ending?.awaitEnd(); finished() }
         }
         .onChange(of: session?.phase) { _, phase in
             if let phase {
                 quality.phase(phase)
                 activity?.phase(phase)
             }
+            if phase?.isActive == true { flushCues() }
             isSpeaking = phase == .speaking
             interrupt = phase == .speaking ? { session?.interrupt() } : nil
             // Counted once audio flows, so it names the engine the call ended up on.
             if phase?.isActive == true, !reported, let session {
                 reported = true
                 Analytics.shared.capture(.voiceCallStarted(session.analyticsName))
-                model.callStarted(botId, call: call)
+                if let hostId = link?.hostId { model.callStarted(botId, call: call, expectedHostId: hostId) }
             }
             // A cloud engine that can't start or drops mid-call hands over to on-device voice.
             if case .failed(let message, _) = phase, let provider = session?.provider {
@@ -116,14 +139,11 @@ struct CallView: View {
             let transcribe = VoiceSettings.transcribeModel(provider)
             let speechModel = VoiceSettings.speechModel(provider)
             let voice = VoiceSettings.voice(provider)
-            let client = { [model] () throws -> HostClient in
-                guard let client = model.client else { throw VoiceError("Not connected to \(model.hostName).") }
-                return client
-            }
+            let client = { try await link.client() }
             engine = CloudSpeechEngine(provider: provider, speech: .init(
                 transcribe: { try await VoiceSettings.inReadersScript(client().voiceTranscribe(provider, model: transcribe, wav: $0)) },
                 speak: { try await client().voiceSpeak(provider, model: speechModel, voice: voice, text: $0) },
-                send: { [model, botId, call] in model.send($0, to: botId, call: call) }
+                send: { link.send($0) }
             ))
             // The computer keeps the call, though it carries no voice model.
             Task { _ = try? await link.start("speech", provider: provider) }
@@ -137,21 +157,11 @@ struct CallView: View {
             }
             cloudStartedAt = .now
         } else {
-            engine = OnDeviceEngine { [model, botId, call] in model.send($0, to: botId, call: call) }
+            engine = OnDeviceEngine { link.send($0) }
             Task { _ = try? await link.start("device") }
         }
         quality.begin(engine.analyticsName)
         (engine as? GeminiLiveEngine)?.onStall = { [quality] in quality.stalled() }
-        engine.onActivityChanged = { [weak engine, model, callID] active in
-            if active {
-                model.beginVoiceCall(callID, hear: { [weak engine, activity] cue in
-                    engine?.hear(cue)
-                    activity?.heard(cue)
-                }, end: { [weak engine] in engine?.end() })
-            } else {
-                model.endVoiceCall(callID)
-            }
-        }
         // A muted call stays muted on the engine that takes over.
         engine.muted = session?.muted == true
         session = engine
@@ -178,6 +188,12 @@ struct CallView: View {
             guard visible, transition == request else { return }
             begin(cloud: provider)
         }
+    }
+
+    private func flushCues() {
+        guard let engine = session else { return }
+        pendingCues.flush(ready: { visible && !model.retired && session === engine && engine.phase.isActive },
+                          deliver: { engine.hear($0) })
     }
 
     private func countCloudMinutes() {
@@ -237,7 +253,7 @@ struct CallView: View {
 
     /// The bot; tapping it while it talks cuts the reply short.
     private var avatar: some View {
-        Button { session?.interrupt() } label: {
+        Button { if session?.phase == .speaking { session?.interrupt() } else { showConversation() } } label: {
             Group {
                 if let bot { CharacterAvatar(bot: bot, size: 34) }
             }
@@ -245,7 +261,6 @@ struct CallView: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: session?.phase == .speaking)
         }
         .buttonStyle(.plain)
-        .disabled(session?.phase != .speaking)
         .accessibilityLabel(session?.phase == .speaking ? "Interrupt" : bot?.name ?? "")
     }
 

@@ -154,6 +154,20 @@ This does not guarantee a fixed number of searches or a particular response time
 
 The personal build records local timing and failure categories to help diagnose
 premature disconnections. These diagnostic entries contain no speech, chat text,
-provider error messages or API keys. They distinguish pressing End call from leaving
-the desktop conversation view; leaving that view currently ends its call. Completing
-a bot task should keep the call open for your next question.
+provider error messages or API keys. They distinguish pressing End call from the global call owner being removed.
+Completing a bot task keeps the call open for your next question.
+
+
+### Browse other bots during a call
+
+Updated personal clients keep the call open when you switch bots, computers or app
+sections. The global call bar continues to show the original bot and computer.
+Tap its name to return to that conversation; mute, interrupt, settings and End call
+still control that original call. Starting another call or dictating into a message
+box is unavailable while the microphone belongs to it. On desktop, hiding the
+window also leaves the call running.
+
+Signing out, deleting its bot or replacing the computer connection can still end a
+call. The app will not redirect your microphone to a different bot just because you
+opened its chat. Phone navigation changes require an updated phone client; an
+upstream phone app remains compatible with the personal Host but keeps its own UI.

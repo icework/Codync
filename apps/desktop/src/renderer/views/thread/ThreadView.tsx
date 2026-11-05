@@ -32,7 +32,7 @@ import { GroupEditorView } from '../bots/GroupEditorView'
 import { BotTemplateView } from '../bots/BotTemplateView'
 import { BotEditorView } from '../bots/BotEditorView'
 import { FormSheet } from '../marketplace/pieces'
-import { CallView } from '../call/CallView'
+import { useGlobalCall } from '../call/GlobalCallProvider'
 import { MacChatButton } from './MacChatButton'
 import { ArtifactView } from '../library/ArtifactView'
 import './thread.css'
@@ -60,9 +60,9 @@ export const ThreadView = memo(function ThreadView({ botId }: { botId: string })
   const [showSettings, setShowSettings] = useState(false)
   const [detailsTab, setDetailsTab] = useState<DetailsTab>('details')
   const [compactDetails, setCompactDetails] = useState(false)
-  const [calling, setCalling] = useState(false)
-  const [callSpeaking, setCallSpeaking] = useState(false)
-  const interruptCall = useRef<(() => void) | null>(null)
+  const call = useGlobalCall()
+  const calling = call.active !== null
+  const ownsCall = call.active?.store === store && call.active.botId === botId
   const [routineId, setRoutineId] = useState<string | null>(null)
   // A group member's settings, opened from its notice.
   const [editingMember, setEditingMember] = useState<string | null>(null)
@@ -200,17 +200,12 @@ export const ThreadView = memo(function ThreadView({ botId }: { botId: string })
                 botId={botId}
                 reply={replyTo}
                 cancelReply={cancelReply}
-                onCall={!calling && bot ? () => setCalling(true) : null}
-                onInterrupt={callSpeaking ? () => interruptCall.current?.() : null}
+                onCall={!calling && bot ? () => call.start(store, botId) : null}
+                onInterrupt={ownsCall && call.speaking ? call.interrupt : null}
               />
             </>
           )}
         </div>
-        {calling ? (
-          <div className="call-overlay">
-            <CallView botId={botId} onSpeaking={setCallSpeaking} interrupt={interruptCall} onEnd={() => setCalling(false)} />
-          </div>
-        ) : null}
         {artifactId ? <ArtifactView botId={botId} artifactId={artifactId} close={() => setArtifactId(null)} /> : null}
       </div>
       <ChatSidePanel

@@ -93,6 +93,7 @@ extension BotStore {
     }
 
     private func stopTransport() {
+        verifiedClientGeneration = nil
         streamTask?.cancel()
         streamTask = nil
         eventsTask?.cancel()
@@ -131,6 +132,7 @@ extension BotStore {
         self.transport = transport
         let client = HostClient(transport: transport)
         self.client = client
+        let generation = clientGeneration
         if let remote = transport as? any RemoteTransport { watch(remote) }
         for await state in transport.states() {
             guard !Task.isCancelled, !retired else { return }
@@ -139,7 +141,7 @@ extension BotStore {
                 setHostRoute(route)
                 if eventsTask == nil {
                     if connection != .online { setConnection(.connecting) }
-                    eventsTask = Task { [weak self] in await self?.runEvents(client) }
+                    eventsTask = Task { [weak self] in await self?.runEvents(client, generation: generation) }
                     // Mailbox outcomes that happened while this app wasn't listening (§10.2).
                     if let remote = transport as? any RemoteTransport {
                         Task { [weak self] in await self?.reconcileQueued(remote) }
@@ -205,6 +207,7 @@ extension BotStore {
     }
 
     private func stopEvents() {
+        verifiedClientGeneration = nil
         eventsTask?.cancel()
         eventsTask = nil
         setHostRoute(nil)

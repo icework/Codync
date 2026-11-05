@@ -97,10 +97,14 @@ extension BotStore {
 
     private func deliver(_ text: String, botId: String, replyTo: String?, nonce: String, pasted: [String] = [],
                          call: String? = nil) -> Task<SendProgress, Never> {
-        Task {
+        let expectedHostId = call == nil ? nil : hostId
+        return Task {
             do {
                 // Safe to repeat: the computer skips a nonce it already has.
                 let e = try await withLink(replay: true) { client in
+                    if call != nil, expectedHostId == nil || self.hostId != expectedHostId || self.mismatch != nil {
+                        throw VoiceError("Voice chat ended because the computer identity or compatibility changed.")
+                    }
                     var ids: [String]?
                     if let files = self.outgoingFiles[nonce] {
                         // A fresh upload per attempt: a retry never appends to a half-sent file.

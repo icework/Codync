@@ -85,6 +85,11 @@ internal class Dictation(private val context: Context, private val scope: Corout
     private var before = ""
     private var transcription: Job? = null
     /** Bumped per start and stop, so a start still waiting (the key check) or a late result of an earlier one is dropped. */
+    companion object {
+        private var active = java.lang.ref.WeakReference<Dictation>(null)
+        fun stopActive() { active.get()?.stop() }
+    }
+
     private var generation = 0
 
     private class Recording(val provider: VoiceProvider, val service: DictationService, val pcm: ByteArrayOutputStream = ByteArrayOutputStream())
@@ -92,6 +97,7 @@ internal class Dictation(private val context: Context, private val scope: Corout
     /** Starts with the engine picked beside the mic, after [draft]; a provider goes through [service]'s computer. */
     fun start(draft: String, service: DictationService, edit: ((String) -> String) -> Unit) {
         if (listening || transcribing) return
+        stopActive(); active = java.lang.ref.WeakReference(this)
         failure = null; needsKey = false
         val asked = ++generation
         before = draft
@@ -120,6 +126,7 @@ internal class Dictation(private val context: Context, private val scope: Corout
 
     /** Stops now (another chat, a call, a send) and drops anything still on its way. */
     fun stop() {
+        if (active.get() === this) active.clear()
         generation++
         transcription?.cancel(); transcription = null
         recognizer?.cancel(); recognizer?.destroy(); recognizer = null

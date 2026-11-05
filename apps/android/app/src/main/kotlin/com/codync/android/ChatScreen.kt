@@ -1,15 +1,10 @@
 package com.codync.android
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -64,12 +59,12 @@ import com.kyant.shapes.Capsule
  * One endless conversation with a bot or a group, as iOS `ThreadView`: only deliberate messages
  * show; tool calls and thinking live in "Full conversation". `editGroup` opens a group's editor (its details).
  */
-@Composable fun ChatScreen(state: AppState, store: AppStore, editGroup: (Bot) -> Unit) {
+@Composable fun ChatScreen(state: AppState, store: AppStore, hasActiveVoice: Boolean = state.voice != null, editGroup: (Bot) -> Unit) {
     val bot = state.bots.firstOrNull { it.id == state.selectedBot } ?: return
-    key(state.contextId, state.generation, bot.id) { ThreadView(bot, state, store, editGroup) }
+    key(state.contextId, state.generation, bot.id) { ThreadView(bot, state, store, hasActiveVoice, editGroup) }
 }
 
-@Composable private fun ThreadView(bot: Bot, state: AppState, store: AppStore, editGroup: (Bot) -> Unit) {
+@Composable private fun ThreadView(bot: Bot, state: AppState, store: AppStore, hasActiveVoice: Boolean, editGroup: (Bot) -> Unit) {
     AnalyticsOnAppear(AnalyticsEvent.ScreenViewed(AnalyticsScreen.Chat))
     val context = LocalContext.current
     // The bot's details sheet and the page it opens on.
@@ -88,7 +83,7 @@ import com.kyant.shapes.Capsule
     val connect = ConnectionRequestActions({ id, item -> setupEntry = id; app = item }, { id, item -> setupEntry = id; connector = item })
     val startCall = rememberStartVoice(bot.id, state, store) { micDenied = true }
     // "Talk to Codync" asked for a call here: taken even during a call, so it can't start one after it.
-    LaunchedEffect(state.callRequest) { if (store.takeCallRequest(bot.id) && state.voice == null) startCall() }
+    LaunchedEffect(state.callRequest) { if (store.takeCallRequest(bot.id) && !hasActiveVoice) startCall() }
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     var composerHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -103,11 +98,6 @@ import com.kyant.shapes.Capsule
         ScrollEdge(Edge.Top, top + 84.dp)
         ScrollEdge(Edge.Bottom, with(density) { composerHeight.toDp() } + 4.dp, Modifier.align(Alignment.BottomCenter))
         ThreadHeader(bot, state, store) { if (bot.kind == "group") editGroup(bot) else details = DetailsRequest() }
-        // The call floats over the chat under the header, as on iOS; the chat stays readable and usable.
-        AnimatedVisibility(state.voice != null, Modifier.padding(top = top + 54.dp),
-            enter = fadeIn(Motion.fade()) + slideInVertically(Motion.layoutOffset) { -it }, exit = fadeOut(Motion.fade()) + slideOutVertically(Motion.layoutOffset) { -it }) {
-            state.voice?.let { CallBar(it, state, store) }
-        }
         // Measured with the keyboard and navigation bar under it, so the last message clears them too.
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { composerHeight = it.height }
             .imePadding().navigationBarsPadding()) {
@@ -115,7 +105,7 @@ import com.kyant.shapes.Capsule
             val mismatch = state.mismatch
             if (mismatch != null) UpdateNeededCard(state, mismatch, store::requestHostUpdate, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
             // An artifact's viewer has its own box for the same draft; two would overwrite each other.
-            else if (viewing == null) MessageComposer(bot, chatState, store, onCall = if (state.voice == null && state.actualConnection is LinkState.Ready) startCall else null,
+            else if (viewing == null) MessageComposer(bot, chatState, store, onCall = if (!hasActiveVoice && state.actualConnection is LinkState.Ready) startCall else null,
                 onInterrupt = if (state.voice?.botId == bot.id && state.voice.state.phase == VoicePhase.Speaking) store::interruptVoice else null,
                 replyTo = replyTo, cancelReply = { replyId = null },
                 queued = queuedMessages(state.chatEntries(bot), bot.isWorking))

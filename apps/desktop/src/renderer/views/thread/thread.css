@@ -385,16 +385,6 @@
   font-size: var(--text-callout);
 }
 
-.call-overlay {
-  position: absolute;
-  top: 16px;
-  left: 0;
-  right: 0;
-  z-index: 6;
-  display: flex;
-  justify-content: center;
-  animation: call-in var(--layout) both;
-}
 @keyframes call-in {
   from {
     opacity: 0;

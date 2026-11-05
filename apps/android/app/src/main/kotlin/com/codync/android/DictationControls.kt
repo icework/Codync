@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,7 +50,9 @@ import kotlinx.coroutines.delay
 @Composable internal fun DictationButton(dictation: Dictation, state: AppState, store: AppStore, height: Dp, draft: () -> String,
     edit: ((String) -> String) -> Unit) {
     val context = LocalContext.current
-    val start = { dictation.start(draft(), store.dictationService(context), edit) }
+    val voiceBusy by rememberUpdatedState(LocalVoiceBusy.current)
+    LaunchedEffect(voiceBusy) { if (voiceBusy) dictation.stop() }
+    val start = { if (!voiceBusy) dictation.start(draft(), store.dictationService(context), edit) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) start() else dictation.failure = "Allow microphone access in Settings to dictate."
     }
@@ -59,7 +62,7 @@ import kotlinx.coroutines.delay
         if (recording) RecordingPill(dictation, height)
         else Row(Modifier.height(height).clip(Capsule()).background(Palette.bubbleAgent), verticalAlignment = Alignment.CenterVertically) {
             val (source, pressed) = rememberPress()
-            Box(Modifier.size(height).pressScale(pressed).clickable(source, null, role = Role.Button) {
+            Box(Modifier.size(height).pressScale(pressed).clickable(source, null, enabled = !voiceBusy, role = Role.Button) {
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) start()
                 else permission.launch(Manifest.permission.RECORD_AUDIO)
             }.semantics { contentDescription = "Dictate" }, contentAlignment = Alignment.Center) {

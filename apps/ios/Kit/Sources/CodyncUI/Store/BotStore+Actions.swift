@@ -8,7 +8,8 @@ extension BotStore {
     /// The client while the link is really up: not during a reconnect the grace period keeps
     /// quiet, nor right after coming back to the foreground, when the old link is already gone.
     var live: HostClient? {
-        connection == .online && heldDrop == nil && eventsTask != nil && !retired ? client : nil
+        connection == .online && heldDrop == nil && eventsTask != nil && !retired
+            && verifiedClientGeneration == clientGeneration ? client : nil
     }
 
     /// The client once the link is up. A reconnect in progress is waited out (headers show it,
@@ -78,9 +79,14 @@ extension BotStore {
 
     public func stop(_ botId: String) { perform(replay: true) { try await $0.stop(botId) } }
     /// A call's audio is on: the lead speaks first, on the call (an older host, which has no lead, never gets this).
-    public func callStarted(_ botId: String, call: String) {
+    public func callStarted(_ botId: String, call: String, expectedHostId: String) {
         guard bots[botId]?.lead == true else { return }
-        perform { try await $0.callStarted(botId, call: call) }
+        perform { client in
+            guard self.hostId == expectedHostId, self.mismatch == nil else {
+                throw VoiceError("Voice chat ended because the computer identity or compatibility changed.")
+            }
+            try await client.callStarted(botId, call: call)
+        }
     }
     /// The bot's own agent again, off the fallback it runs on.
     public func switchBack(_ botId: String) { perform(replay: true) { try await $0.switchBack(botId) } }

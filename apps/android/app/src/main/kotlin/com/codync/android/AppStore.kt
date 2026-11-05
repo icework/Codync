@@ -49,6 +49,8 @@ class AppStore internal constructor(
     internal var connectionJob: Job? = null
     internal var graceJob: Job? = null
     internal var channel: EncryptedChannel? = null
+    /** The transport whose hello has been checked, for identity-pinned voice requests. */
+    internal var voiceReadyChannel: EncryptedChannel? = null
     internal var foreground = false
     internal val foregroundState = MutableStateFlow(false)
     internal val setupTerminals = mutableMapOf<String, SetupTerminalSession>()

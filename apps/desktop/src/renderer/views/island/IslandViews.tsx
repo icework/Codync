@@ -235,7 +235,7 @@ export function Message({ model }: { model: IslandModel }) {
             {dictation.listening ? (
               <RecordingPill startedAt={dictation.startedAt} sample={() => dictation} onStop={() => dictation.finish()} color="#ffffff" />
             ) : dictation.available ? (
-              <button type="button" className="island-mic" aria-label={tr('Dictate')} title={tr('Dictate')} onClick={() => dictation.start(model.draft)}>
+              <button type="button" className="island-mic" aria-label={tr('Dictate')} title={tr('Dictate')} disabled={model.callActive} onClick={() => dictation.start(model.draft)}>
                 <Icon name="mic" size={12} weight="medium" scaled={false} />
               </button>
             ) : null}

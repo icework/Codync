@@ -9,11 +9,13 @@ else a generic "Bug fixes and improvements" line. Delete old sections.
 
 ## 2.39.1
 ### zh-Hant
+- 語音通話不再因切換 bot 或返回列表而中斷；全域通話列可回到原 bot、靜音與掛斷。
 - OpenAI 即時語音新增 GPT-Live 選項，可在交談時交辦工作、查詢進度與回覆審批；原有 Realtime 設定不變。
 - GPT-Live 的模型測試會確認存取權限；語音與工具路由分別計費。
 - 推理強度滑桿新增漸層點陣，讓不同強度更容易辨識。
 
 ### en-US
+- Keep voice calls running while switching bots or returning to the list, with global controls for the original call.
 - Choose GPT-Live for OpenAI voice calls while your bots handle tasks, status checks and approvals. Existing Realtime settings stay unchanged.
 - GPT-Live model tests verify access without starting a paid call. Voice and tool routing are billed separately.
 - The reasoning effort slider now uses a dotted gradient to make levels easier to distinguish.

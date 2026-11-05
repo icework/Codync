@@ -104,13 +104,13 @@ fun AppStore.cancelQueued(send: PendingSend) = action("cancel:" + send.nonce) {
     }
 }
 
-internal suspend fun AppStore.deliver(send: PendingSend) {
+internal suspend fun AppStore.deliver(send: PendingSend, expectedHostId: String? = null) {
     if (!sends.add(send.nonce)) return
     try {
         if (state.value.entries.any { it.botId == send.botId && it.clientNonce == send.nonce }) return
         savePending(send)
         val active = channel
-        if (active?.state?.value is LinkState.ComputerOffline && send.files.isEmpty()) {
+        if (active?.state?.value is LinkState.ComputerOffline && send.files.isEmpty() && send.call == null) {
             savePending(send.copy(status = SendStatus.Waiting))
             try { active.enqueue(send); return }
             catch (error: IOException) {
@@ -132,7 +132,8 @@ internal suspend fun AppStore.deliver(send: PendingSend) {
             ids.add(id)
             withContext(Dispatchers.IO) { attachments.cache(id, file) }
         }
-        val result = connection.call("send", send.body(ids))
+        val result = if (expectedHostId == null) connection.call("send", send.body(ids))
+            else hostQuery("send", send.body(ids), expectedHostId = expectedHostId)
         val entry = Entry.decode(result.jsonObject.getValue("entry").jsonObject)
         withContext(Dispatchers.IO) { requireNotNull(database).receive(listOf(entry)) }
         refresh()

@@ -16,6 +16,7 @@ import Testing
     await fake.emit(#"{"type":"bot","bot":{"id":"b1","name":"Bot","rev":1,"lastAt":1}}"#)
     #expect(await until { store.connection == .online })
 
+    store.hostId = "h1" // Voice calls require the identity from hello.
     store.send("said aloud", to: "b1", call: "c1")
     #expect(await until { store.chat("b1").contains { $0.id == "e1" } })
     #expect(prompts == 0)

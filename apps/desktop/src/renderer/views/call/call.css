@@ -111,3 +111,25 @@
 .call-gap-wide {
   padding-top: 24px;
 }
+
+
+/* Owned by the chat window, outside every selected bot's view and recovery branch. */
+.global-call-overlay {
+  position: fixed;
+  top: 12px;
+  left: 76px;
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  animation: call-in var(--layout) both;
+}
+.global-call-overlay > .call { pointer-events: auto; }
+.call-destination {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  min-width: 0;
+  max-width: 150px;
+}

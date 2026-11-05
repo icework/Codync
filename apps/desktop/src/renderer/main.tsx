@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import './styles/theme.css'
 import { ChatWindow } from './views/ChatWindow'
+import { GlobalCallProvider } from './views/call/GlobalCallProvider'
 import { PairingWindow } from './views/PairingWindow'
 import { RenderBoundary } from './views/RenderBoundary'
 import { IslandWindow } from './views/island/IslandWindow'
@@ -42,7 +43,7 @@ if (page === 'island') {
   if (page !== 'pairing') void account.start()
   root.render(
     <RenderBoundary>
-      <AppContext.Provider value={app}>{page === 'pairing' ? <PairingWindow /> : <ChatWindow />}</AppContext.Provider>
+      <AppContext.Provider value={app}>{page === 'pairing' ? <PairingWindow /> : <GlobalCallProvider><ChatWindow /></GlobalCallProvider>}</AppContext.Provider>
     </RenderBoundary>,
   )
 }

@@ -30,6 +30,7 @@ export class OpenAIRealtimeEngine extends VoiceEngine {
   private playbackTimer: ReturnType<typeof setInterval> | null = null
   private playbackMuted = false
   private generation = 0
+  private micRequest = 0
   private ending: Promise<void> = Promise.resolve()
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private stopDevices: (() => void) | null = null
@@ -94,18 +95,31 @@ export class OpenAIRealtimeEngine extends VoiceEngine {
   }
 
   private async replaceMic() {
+    const pc = this.pc
     if (this.ended || !this.stream) return
+    const generation = this.generation
+    const request = ++this.micRequest
+    const current = () => !this.ended && this.pc === pc && generation === this.generation && request === this.micRequest
+    let next: MediaStream | null = null
+    let adopted = false
     try {
-      const next = await microphone()
-      if (this.ended) return void next.getTracks().forEach((t) => t.stop())
+      next = await microphone()
+      if (!current()) return
       const track = next.getAudioTracks()[0]
-      if (!track) return
-      track.enabled = !this.muted
-      await this.pc?.getSenders().find((s) => s.track?.kind === 'audio')?.replaceTrack(track)
+      const sender = pc?.getSenders().find((s) => s.track?.kind === 'audio')
+      if (!track || (pc && !sender)) return
+      // Muting may change while replaceTrack waits; do not transmit until this request is adopted.
+      track.enabled = false
+      if (sender) await sender.replaceTrack(track)
+      if (!current()) return
       this.release()
       this.stream = next
+      track.enabled = !this.muted
+      adopted = true
     } catch (e) {
-      console.error('realtime: microphone change', errorMessage(e))
+      if (current()) console.error('realtime: microphone change', errorMessage(e))
+    } finally {
+      if (!adopted) next?.getTracks().forEach((track) => track.stop())
     }
   }
 

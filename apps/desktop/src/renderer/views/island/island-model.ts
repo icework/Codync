@@ -35,6 +35,7 @@ export class IslandModel extends Observable {
   readonly dictation = new Dictation((change) => this.update(() => (this.draft = change(this.draft))), dictationPlatform())
   /** The voice input shortcut, as Settings → General has it. */
   shortcut: VoiceShortcut = 'off'
+  callActive = false
   /** The shape grew on its last change: open with a spring, close without one. */
   growing = true
   private peek = false
@@ -50,6 +51,12 @@ export class IslandModel extends Observable {
   private keyboard = false
 
   start() {
+    const callChanged = (active: boolean) => {
+      if (active) this.dictation.cancel()
+      this.update(() => { this.callActive = active })
+    }
+    window.codync.speech.onCallActive(callChanged)
+    callChanged(window.codync.speech.callActive())
     const island = window.codync.island
     island.onSummary((s) => this.apply(s))
     island.onScreen((s) => this.update(() => (this.screen = s)))

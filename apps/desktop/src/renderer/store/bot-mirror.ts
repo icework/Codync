@@ -139,6 +139,13 @@ export class BotMirror extends Observable {
     return this.waiting > 0 && this.connection.kind === 'online' ? { kind: 'connecting' } : this.connection
   }
 
+  /** The mirrored host identity, for UI sessions that must not cross a replacement host. */
+  get hostIdentity() {
+    // HTTP hello and SSE hello can arrive in either order. A disagreement is not a verified identity.
+    if (this.hello?.hostId && this.hostId && this.hello.hostId !== this.hostId) return null
+    return this.hello?.hostId ?? this.hostId
+  }
+
   get hostName() {
     return this.hello?.name ?? this.computer.name
   }

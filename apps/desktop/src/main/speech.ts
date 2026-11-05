@@ -1,7 +1,8 @@
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { app, ipcMain, type WebContents } from 'electron'
+import { app, ipcMain, webContents, type WebContents } from 'electron'
+import { CallAudioOwner } from '../shared/call-audio-owner'
 import type { SpeechEvent } from '../shared/ipc'
 
 // On-device speech recognition for calls: a small Swift helper (native/speech-macos) runs
@@ -23,12 +24,43 @@ let child: ChildProcessWithoutNullStreams | null = null
 let listener: WebContents | null = null
 /** Bumped per start: a stopping process may still deliver its final result, an older one may not. */
 let generation = 0
+const observed = new WeakSet<WebContents>()
+const callOwner = new CallAudioOwner((active) => {
+  for (const contents of webContents.getAllWebContents()) {
+    if (!contents.isDestroyed()) contents.send('speech:callActive', active)
+  }
+})
+export const callAudioActive = () => callOwner.active
+
+/** Cancels capture without delivering late text or a stopped event to its next owner. */
+function cancelCapture() {
+  generation++
+  stop()
+  listener = null
+}
+
+function released(contents: WebContents, id: number) {
+  if (listener === contents) cancelCapture()
+  callOwner.setCalling(id, false)
+}
+
+function observe(contents: WebContents) {
+  if (observed.has(contents)) return
+  observed.add(contents)
+  const id = contents.id
+  contents.once('destroyed', () => released(contents, id))
+}
 
 function emit(event: SpeechEvent) {
   if (listener && !listener.isDestroyed()) listener.send('speech:event', event)
 }
 
 function start(sender: WebContents, locale: string | null) {
+  observe(sender)
+  if (!callOwner.permitsSpeech(sender.id)) {
+    sender.send('speech:event', { type: 'error', message: 'A voice call is using the microphone.' } satisfies SpeechEvent)
+    return
+  }
   stop()
   // Another window's dictation or call loses the helper, and its exit (an older generation) won't say so.
   if (listener && listener !== sender) emit({ type: 'stopped' })
@@ -54,7 +86,7 @@ function start(sender: WebContents, locale: string | null) {
     if (child === proc) child = null
     if (generation === mine) emit({ type: 'stopped' })
   })
-  proc.on('error', (error) => emit({ type: 'error', message: error.message }))
+  proc.on('error', (error) => { if (generation === mine) emit({ type: 'error', message: error.message }) })
 }
 
 function stop() {
@@ -78,6 +110,13 @@ function locales() {
 }
 
 export function registerSpeech() {
+  ipcMain.on('speech:callActive', (e) => (e.returnValue = callOwner.active))
+  ipcMain.on('voice:calling', (e, on: boolean) => {
+    if (typeof on !== 'boolean') return
+    observe(e.sender)
+    if (callOwner.setCalling(e.sender.id, on) && on && listener && listener !== e.sender) cancelCapture()
+  })
+  app.on('render-process-gone', (_e, contents) => released(contents, contents.id))
   ipcMain.on('speech:available', (e) => (e.returnValue = speechAvailable()))
   ipcMain.on('speech:locales', (e) => (e.returnValue = locales()))
   ipcMain.on('speech:start', (e, locale: string | null) => start(e.sender, locale))

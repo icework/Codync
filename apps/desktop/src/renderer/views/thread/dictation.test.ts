@@ -1,7 +1,8 @@
+import { acquireCallMicrophone } from '../call/call-microphone.ts'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { SpeechEvent } from '../../../shared/ipc.ts'
-import { Dictation, type DictationPlatform } from './dictation.ts'
+import { Dictation, stopDictation, type DictationPlatform } from './dictation.ts'
 import { MIN_SAMPLES, PIECE_SAMPLES } from './dictation-pieces.ts'
 
 /** A stub platform: a speech helper driven by `say`, a microphone fed by `hear`, transcripts on demand. */
@@ -202,3 +203,59 @@ test('a failed transcription reports it and sends nothing', async () => {
   assert.equal(sent, false)
   assert.equal(s.dictation.busy, false)
 })
+
+
+test('an active call prevents microphone competition through clicks and shortcuts', () => {
+  const s = setup()
+  const release = acquireCallMicrophone()
+  try {
+    s.dictation.start(s.box())
+    assert.equal(s.dictation.shortcutKey('double', () => assert.fail('sent')), false)
+    assert.deepEqual(s.log, [])
+    assert.equal(s.dictation.busy, false)
+  } finally { release() }
+  s.dictation.start(s.box())
+  assert.deepEqual(s.log, ['speech.start'])
+  s.dictation.cancel()
+})
+
+
+test('a call in another renderer blocks manual dictation and its shortcut', () => {
+  const s = setup({ callActive: () => true })
+  s.dictation.start(s.box())
+  assert.equal(s.dictation.shortcutKey('double', () => assert.fail('sent')), false)
+  assert.deepEqual(s.log, [])
+  assert.equal(s.dictation.busy, false)
+})
+
+test('a call claimed during key lookup prevents opening the provider microphone', async () => {
+  let calling = false
+  let answer: ((hasKey: boolean) => void) | undefined
+  const s = setup({ provider: () => 'openai', callActive: () => calling,
+    checkKey: () => new Promise((resolve) => { answer = resolve }) })
+  s.dictation.start(s.box())
+  calling = true
+  answer!(true)
+  await settle()
+  assert.ok(!s.log.includes('mic.open'))
+  assert.equal(s.dictation.busy, false)
+})
+
+for (const notified of [false, true]) {
+  test(`a call claimed during microphone permission stops the late capture (notified=${notified})`, async () => {
+    let calling = false
+    let captured: ((stop: () => void) => void) | undefined
+    let stopped = 0
+    const s = setup({ provider: () => 'openai', callActive: () => calling,
+      microphone: () => new Promise((resolve) => { captured = resolve }) })
+    s.dictation.start(s.box())
+    await settle()
+    calling = true
+    if (notified) stopDictation() // The main-process bool broadcast invalidates the renderer's pending request.
+    captured!(() => { stopped++ })
+    await settle()
+    assert.equal(stopped, 1)
+    assert.equal(s.dictation.busy, false)
+    assert.equal(s.box(), 'Fix the bug')
+  })
+}

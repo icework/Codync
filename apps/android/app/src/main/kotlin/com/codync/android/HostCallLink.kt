@@ -14,12 +14,17 @@ private const val END_TRIES = 3
 /** The computer keeps a call though it carries no voice model (on-device or speech to text). */
 internal fun AppStore.startCallOnHost(call: VoiceBinding, mode: String, provider: VoiceProvider?) {
     contextScope.launch {
-        try { hostCall("startCall", buildJsonObject {
+        try { voiceRequest(call, "startCall", buildJsonObject {
             put("botId", call.botId); put("callId", call.id); put("mode", mode); provider?.let { put("provider", it.id) }
             put("language", java.util.Locale.getDefault().toLanguageTag())
         }, 30_000) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { }
     }
 }
+
+
+/** Resolve a ready connection, then recheck the frozen host identity before sending any call RPC. */
+internal suspend fun AppStore.voiceRequest(call: VoiceBinding, method: String, body: JsonObject, timeout: Long): JsonElement =
+    hostQuery(method, body, timeout, call.generation, call.hostId)
 
 /** The call as the computer runs it, made once per call (it outlives an engine switch). */
 internal fun VoiceBinding.link(store: AppStore): HostCallLink = link ?: HostCallLink(store, this).also { link = it }
@@ -36,14 +41,14 @@ internal class HostCallLink(private val store: AppStore, private val call: Voice
     private var hearing = false
 
     override suspend fun start(provider: VoiceProvider, model: String, voice: String): CallSession =
-        CallSession.decode(store.hostCall("startCall", buildJsonObject {
+        CallSession.decode(store.voiceRequest(call, "startCall", buildJsonObject {
             put("botId", call.botId); put("callId", call.id); put("mode", "realtime"); put("provider", provider.id)
             put("model", model); put("voice", voice); put("language", java.util.Locale.getDefault().toLanguageTag())
         }, 30_000).jsonObject)
 
     override suspend fun startLive(model: String, voice: String, sdp: String): LiveCallSession {
-        requireOpenAILiveSupport(store.hostCall("voiceStatus", JsonObject(emptyMap()), 30_000).jsonObject)
-        val result = store.hostCall("startLiveCall", buildJsonObject {
+        requireOpenAILiveSupport(store.voiceRequest(call, "voiceStatus", JsonObject(emptyMap()), 30_000).jsonObject)
+        val result = store.voiceRequest(call, "startLiveCall", buildJsonObject {
             put("botId", call.botId); put("callId", call.id); put("model", model); put("voice", voice); put("sdp", sdp)
             put("language", java.util.Locale.getDefault().toLanguageTag())
         }, 30_000).jsonObject
@@ -57,7 +62,7 @@ internal class HostCallLink(private val store: AppStore, private val call: Voice
     }
 
     private suspend fun liveCall(method: String, session: String, content: JsonObjectBuilder.() -> Unit): List<JsonObject> = order.withLock {
-        val result = store.hostCall(method, buildJsonObject { put("callId", call.id); put("sessionId", session); content() }, 60_000).jsonObject
+        val result = store.voiceRequest(call, method, buildJsonObject { put("callId", call.id); put("sessionId", session); content() }, 60_000).jsonObject
         val events = result["events"] as? JsonArray ?: throw java.io.IOException("The computer sent no Live events.")
         events.map { it as? JsonObject ?: throw java.io.IOException("The computer sent an invalid Live event.") }
     }
@@ -67,7 +72,7 @@ internal class HostCallLink(private val store: AppStore, private val call: Voice
         return order.withLock {
             val lines = transcript.drain(withOpen = true)
             try {
-                store.hostCall("callTool", buildJsonObject {
+                store.voiceRequest(call, "callTool", buildJsonObject {
                     put("callId", call.id); put("name", name); put("arguments", arguments); put("lines", WireJson.encodeToJsonElement(lines))
                 }, 60_000).jsonObject["result"] ?: JsonObject(emptyMap())
             } catch (cancelled: CancellationException) { transcript.restore(lines); throw cancelled }
@@ -92,7 +97,7 @@ internal class HostCallLink(private val store: AppStore, private val call: Voice
         val lines = WireJson.encodeToJsonElement(transcript.drain(withOpen = true))
         val body = buildJsonObject { put("botId", call.botId); put("callId", call.id); put("seconds", seconds); put("lines", lines) }
         for (attempt in 1..END_TRIES) {
-            try { store.hostQuery("endCall", body, 20_000, call.generation); return@withLock }
+            try { store.hostQuery("endCall", body, 20_000, call.generation, call.hostId); return@withLock }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { if (attempt < END_TRIES) delay(2_000) }
         }
@@ -104,7 +109,7 @@ internal class HostCallLink(private val store: AppStore, private val call: Voice
             order.withLock {
                 val lines = transcript.drain(withOpen = false)
                 if (lines.isEmpty()) return@withLock
-                try { store.hostCall("callLines", buildJsonObject { put("callId", call.id); put("lines", WireJson.encodeToJsonElement(lines)) }, 30_000) }
+                try { store.voiceRequest(call, "callLines", buildJsonObject { put("callId", call.id); put("lines", WireJson.encodeToJsonElement(lines)) }, 30_000) }
                 catch (cancelled: CancellationException) { transcript.restore(lines); throw cancelled }
                 catch (_: Exception) { transcript.restore(lines) }
             }

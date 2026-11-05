@@ -15,10 +15,11 @@ import okhttp3.OkHttpClient
 // call settings; a cloud engine that can't start or drops mid-call hands over to on-device voice.
 
 /** The call in progress: its engine (replaced on a fallback) and start times. */
-internal class VoiceBinding(val id: String, val botId: String, val generation: Int, val startedAt: Long) {
+internal class VoiceBinding(val id: String, val botId: String, val generation: Int, val startedAt: Long, val hostId: String) {
     var engine: VoiceEngine? = null
     /** The newest cue the call heard (`CallCue.seq`), kept across engines: a replayed one isn't said again. */
     var heard = 0L
+    val pendingCues = PendingVoiceCues()
     /** When the current cloud engine started, for this month's minutes. */
     var cloudSince: Long? = null
     /** The call settings the current engine was built from. */
@@ -43,9 +44,10 @@ internal fun AppStore.voiceChoices(): VoiceChoices = VoicePreferences.choices(ap
 
 fun AppStore.startVoice(botId: String, expectedGeneration: Int = state.value.generation) {
     if (state.value.generation != expectedGeneration || state.value.loading || state.value.voice != null) return
-    if (!foreground || state.value.actualConnection !is LinkState.Ready || state.value.bots.none { it.id == botId && !it.deleted }) {
+    if (!foreground || state.value.mismatch != null || state.value.hello?.text("hostId") == null || state.value.actualConnection !is LinkState.Ready || state.value.bots.none { it.id == botId && !it.deleted }) {
         mutableState.update { it.copy(error = "Open the connected bot's conversation to start voice chat.") }; return
     }
+    Dictation.stopActive()
     val id = UUID.randomUUID().toString()
     voiceGeneration = expectedGeneration
     val starting = VoiceState(settings = VoicePreferences.load(application), provider = voiceChoices().provider)
@@ -58,7 +60,8 @@ fun AppStore.startVoice(botId: String, expectedGeneration: Int = state.value.gen
 internal fun AppStore.attachVoice(id: String, botId: String): VoiceBinding? {
     val call = state.value.voice ?: return null
     if (call.id != id || call.botId != botId || voiceGeneration != state.value.generation || state.value.loading || voiceBinding != null) return null
-    val binding = VoiceBinding(id, botId, state.value.generation, SystemClock.elapsedRealtime())
+    val hostId = state.value.hello?.text("hostId") ?: return null
+    val binding = VoiceBinding(id, botId, state.value.generation, SystemClock.elapsedRealtime(), hostId)
     voiceBinding = binding
     begin(binding, voiceChoices().provider)
     connect()
@@ -98,8 +101,8 @@ private fun AppStore.begin(call: VoiceBinding, provider: VoiceProvider?) {
                 val transcribe = choices.model(provider, VoiceChoices.Model.Transcribe)
                 val speech = choices.model(provider, VoiceChoices.Model.Speech)
                 CloudSpeechEngine(contextScope, provider, settings, mic(), AndroidClipPlayer, CloudSpeechEngine.Speech(
-                    transcribe = { inReadersScript(voiceTranscribe(provider, transcribe, it)) },
-                    synthesize = { voiceSpeak(provider, speech, voice, it) },
+                    transcribe = { inReadersScript(voiceTranscribe(provider, transcribe, it, call)) },
+                    synthesize = { voiceSpeak(provider, speech, voice, it, call) },
                     send = { sendFromCall(call, it) }))
             }
             // WebRTC records the microphone itself.
@@ -124,6 +127,7 @@ private fun AppStore.begin(call: VoiceBinding, provider: VoiceProvider?) {
             val fallingBack = provider != null && status.phase == VoicePhase.Failed
             if (current && !fallingBack) {
                 publish(call, status)
+                if (status.phase == VoicePhase.Listening || status.phase == VoicePhase.Speaking) flushCues(call)
                 // Live once it listens or talks; a cloud engine that failed first is reported as the one that took over.
                 if (!call.reported && (status.phase == VoicePhase.Listening || status.phase == VoicePhase.Speaking)) {
                     call.reported = true
@@ -140,7 +144,9 @@ private fun AppStore.begin(call: VoiceBinding, provider: VoiceProvider?) {
 
 /** The call's audio is live: the lead speaks first, on the call (only a host with leads marks one, so an older host never gets this). */
 private fun AppStore.callStarted(call: VoiceBinding) {
-    if (state.value.bots.any { it.id == call.botId && it.lead }) command("callStarted", body("botId" to call.botId, "callId" to call.id), "callStarted:" + call.botId)
+    if (state.value.bots.any { it.id == call.botId && it.lead }) action("callStarted:" + call.botId) {
+        voiceRequest(call, "callStarted", body("botId" to call.botId, "callId" to call.id), 20_000)
+    }
 }
 
 /** After the call settings close: a different engine picked there takes over the call, which goes on. */
@@ -182,25 +188,35 @@ private fun AppStore.countCloudMinutes(call: VoiceBinding) {
 
 /** What you said goes out as the call's message, unless the call has moved on. */
 private fun AppStore.sendFromCall(call: VoiceBinding, text: String) {
-    if (state.value.generation != call.generation || state.value.voice?.id != call.id || state.value.loading) return
+    if (state.value.generation != call.generation || state.value.voice?.id != call.id || state.value.loading
+        || voiceHostFailure(call.hostId, state.value.hello?.text("hostId"), state.value.mismatch != null) != null) return
     val send = PendingSend(UUID.randomUUID().toString(), call.botId, text, System.currentTimeMillis(), call = call.id)
-    action("save:" + send.nonce) { savePending(send); deliver(send) }
+    action("save:" + send.nonce) { savePending(send); deliver(send, call.hostId) }
 }
 
 /** What the computer tells the call's voice (host chat/calls/announce), each cue once: the engine only says it. */
 internal fun AppStore.hearCalls(events: List<MirrorEvent>) {
     val call = voiceBinding ?: return
     for (cue in events.filterIsInstance<MirrorEvent.Call>().map { it.cue }) {
-        val engine = call.engine
-        if (cue.call != call.id || cue.seq <= call.heard || engine == null) continue
+        if (cue.call != call.id || cue.seq <= call.heard) continue
+        if (!call.pendingCues.append(cue)) {
+            endVoice("Voice chat ended because too many replies were waiting for audio. Read the call in chat.")
+            return
+        }
         call.heard = cue.seq
-        engine.hear(cue)
+        flushCues(call)
         when (cue.kind) {
             CallCue.Kind.Progress -> call.progress.value = cue.text
             CallCue.Kind.Reply -> call.progress.value = null
             CallCue.Kind.Notice -> {}
         }
     }
+}
+
+private fun AppStore.flushCues(call: VoiceBinding) {
+    val engine = call.engine ?: return
+    call.pendingCues.flush(ready = { voiceBinding === call && call.engine === engine &&
+        engine.state.value.phase in listOf(VoicePhase.Listening, VoicePhase.Speaking) }, deliver = engine::hear)
 }
 
 fun AppStore.endVoice(error: String? = null) {
@@ -281,13 +297,16 @@ internal suspend fun AppStore.voiceSession(provider: VoiceProvider, model: Strin
 }
 
 /** Speech to text for one utterance (a WAV file), with the computer's key. */
-internal suspend fun AppStore.voiceTranscribe(provider: VoiceProvider, model: String, wav: ByteArray): String =
-    hostCall("voiceTranscribe", body("provider" to provider.id, "model" to model, "audio" to Base64.getEncoder().encodeToString(wav)), 60_000)
-        .jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
+internal suspend fun AppStore.voiceTranscribe(provider: VoiceProvider, model: String, wav: ByteArray, call: VoiceBinding? = null): String {
+    val body = body("provider" to provider.id, "model" to model, "audio" to Base64.getEncoder().encodeToString(wav))
+    val result = if (call == null) hostCall("voiceTranscribe", body, 60_000) else voiceRequest(call, "voiceTranscribe", body, 60_000)
+    return result.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
+}
 
 /** Text to speech for a stretch of a reply: the audio and its format (`aac` or `wav`). */
-internal suspend fun AppStore.voiceSpeak(provider: VoiceProvider, model: String, voice: String, text: String): Pair<ByteArray, String> {
-    val clip = hostCall("voiceSpeak", body("provider" to provider.id, "model" to model, "voice" to voice, "text" to text), 90_000).jsonObject
+internal suspend fun AppStore.voiceSpeak(provider: VoiceProvider, model: String, voice: String, text: String, call: VoiceBinding? = null): Pair<ByteArray, String> {
+    val body = body("provider" to provider.id, "model" to model, "voice" to voice, "text" to text)
+    val clip = (if (call == null) hostCall("voiceSpeak", body, 90_000) else voiceRequest(call, "voiceSpeak", body, 90_000)).jsonObject
     val audio = clip["audio"]?.jsonPrimitive?.contentOrNull?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
         ?: throw IOException("Unreadable audio.")
     return audio to (clip["format"]?.jsonPrimitive?.contentOrNull ?: "aac")

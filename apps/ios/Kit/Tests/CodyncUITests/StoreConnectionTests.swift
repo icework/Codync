@@ -138,7 +138,7 @@ import Testing
     // A call's opening can't be told apart from a second one, so it isn't sent twice.
     store.bots["b1"]?.lead = true
     await fake.fail("callStarted", times: 1)
-    store.callStarted("b1", call: "c1")
+    store.callStarted("b1", call: "c1", expectedHostId: "h1")
     #expect(await until { store.lastError != nil })
     #expect(await fake.calls.filter { $0 == "callStarted" }.count == 1)
 }

@@ -39,6 +39,8 @@ export interface SendOptions {
   replyTo?: ReplyQuote | null
   /** The voice call it was said in. */
   call?: string | null
+  /** Checked inside every delayed/retried voice send, never serialized onto the wire. */
+  validateDestination?: () => void
 }
 
 /** Anything larger is refused by the computer. */
@@ -61,7 +63,7 @@ export class BotStore extends BotSync {
   /** The message sent from here last: its row in the queue scrolls into view (`QueuedMessages`). */
   lastSentNonce: string | null = null
 
-  send(text: string, botId: string, { files = [], nonce = crypto.randomUUID(), pasted = [], replyTo = null, call = null }: SendOptions = {}) {
+  send(text: string, botId: string, { files = [], nonce = crypto.randomUUID(), pasted = [], replyTo = null, call = null, validateDestination }: SendOptions = {}) {
     const trimmed = text.trim()
     if ((!trimmed && !files.length) || this.retired) return
     this.lastSentNonce = nonce
@@ -81,17 +83,20 @@ export class BotStore extends BotSync {
       try {
         // Safe to repeat: the computer skips a nonce it already has.
         const e = await this.withLink(async (client) => {
+          validateDestination?.()
           let ids: string[] | null = null
           const pending = this.outgoingFiles.get(nonce)
           if (pending) {
             ids = []
             for (const file of pending) {
               const id = crypto.randomUUID()
+              validateDestination?.()
               await client.upload(botId, id, file.name, file.data)
               cacheAttachment(id, file.data)
               ids.push(id)
             }
           }
+          validateDestination?.()
           return client.send(botId, trimmed, nonce, ids, pasted, replyTo?.id ?? null, call)
         }, true)
         this.outgoingFiles.delete(nonce)
@@ -180,10 +185,13 @@ export class BotStore extends BotSync {
   }
 
   /** A finished call's line, with the rest of its transcript; the chat then shows the call's messages behind it. */
-  async endCall(botId: string, call: string, seconds: number, lines: CallLine[], endReason?: VoiceEndReason) {
+  async endCall(botId: string, call: string, seconds: number, lines: CallLine[], endReason?: VoiceEndReason, validateDestination?: () => void) {
     try {
       // Safe to repeat: the computer ends a call once.
-      const { entry } = await this.withLink((c) => c.call<{ entry: Entry | null }>('endCall', { botId, callId: call, seconds, lines, ...(endReason ? { endReason } : {}) }), true)
+      const { entry } = await this.withLink((c) => {
+        validateDestination?.()
+        return c.call<{ entry: Entry | null }>('endCall', { botId, callId: call, seconds, lines, ...(endReason ? { endReason } : {}) })
+      }, true)
       if (entry) this.upsert(entry)
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error)
@@ -191,10 +199,10 @@ export class BotStore extends BotSync {
   }
 
   /** A call's audio is live: the lead speaks first (only a host with leads marks one, so an older host never gets this). */
-  callStarted(botId: string, call: string) {
+  callStarted(botId: string, call: string, validateDestination?: () => void) {
     if (!this.bots.get(botId)?.lead) return
     // Its opening is the call's, like everything said on it.
-    this.perform((c) => c.call('callStarted', { botId, callId: call }))
+    this.perform((c) => { validateDestination?.(); return c.call('callStarted', { botId, callId: call }) })
   }
 
   screenTakeover(on: boolean) {

@@ -1,3 +1,4 @@
+import { useGlobalCall } from '../call/GlobalCallProvider'
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { groupFastMode } from '@shared/fast-mode'
 import { artifactDraftKey, artifactQuote, type Artifact } from '@shared/artifacts'
@@ -55,6 +56,7 @@ function DestinationComposer({ botId, reply, about, cancelReply, onCall, onInter
 }) {
   const store = useStore()
   const tr = useTr()
+  const call = useGlobalCall()
   const plugins = useModel(pluginsFor(store))
   const bot = store.bots.get(botId) ?? null
   const drafts = store.composerDrafts
@@ -292,7 +294,7 @@ function DestinationComposer({ botId, reply, about, cancelReply, onCall, onInter
               />
             ) : dictation.available ? (
               <HStack as="span" gap={0} className="composer-mic-group">
-                <button className="press composer-mic" aria-label="Dictate" title="Dictate" onClick={() => dictation.start(draft)}>
+                <button className="press composer-mic" aria-label="Dictate" title="Dictate" disabled={call.active !== null} onClick={() => dictation.start(draft)}>
                   <Icon name="mic" size={13} weight="medium" />
                 </button>
                 <DictationEngineMenu />

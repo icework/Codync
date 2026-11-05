@@ -57,7 +57,14 @@ public final class BotStore {
     /// Actions waiting for the link to come back.
     var waiting = 0
     public internal(set) var hostRoute: HostRoute?
-    public internal(set) var client: HostClient?
+    var clientGeneration = UUID()
+    var verifiedClientGeneration: UUID?
+    public internal(set) var client: HostClient? {
+        didSet {
+            clientGeneration = UUID()
+            verifiedClientGeneration = nil
+        }
+    }
     public internal(set) var hello: Hello?
     /// The host's version and `minApp`, kept even when the rest of its `hello` can't be read.
     public internal(set) var hostVersion: HostVersion?

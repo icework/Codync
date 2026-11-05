@@ -55,6 +55,14 @@ actor FakeRemote: RemoteTransport {
     private var hello = #"{"hostId":"h1","name":"Mac","version":"3.0.0","os":"macos","backends":[],"rev":0}"#
     /// What `hello` answers from now on (a host updated in place keeps its link).
     func setHello(_ json: String) { hello = json }
+    private var holdHello = false
+    private(set) var helloWaiting = false
+    func holdHello(_ hold: Bool) { holdHello = hold }
+    private func awaitHello() async throws {
+        helloWaiting = true
+        defer { helloWaiting = false }
+        while holdHello { try await Task.sleep(for: .milliseconds(10)) }
+    }
 
     init(_ state: LinkState) { self.state = state }
 
@@ -110,7 +118,8 @@ actor FakeRemote: RemoteTransport {
     }
 
     nonisolated func call(_ method: String, body: Data, timeout: TimeInterval) async throws -> Data {
-        try await respond(method, body)
+        if method == "hello" { try await awaitHello() }
+        return try await respond(method, body)
     }
 
     private func addEvents(_ c: AsyncThrowingStream<Data, Error>.Continuation) {

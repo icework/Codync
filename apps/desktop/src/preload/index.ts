@@ -92,6 +92,8 @@ const bridge: CodyncBridge = {
     shortcut: () => ipcRenderer.invoke('voice:shortcut'),
     setShortcut: (shortcut) => ipcRenderer.invoke('voice:setShortcut', shortcut),
     setCalling: (on) => ipcRenderer.send('voice:calling', on),
+    callActive: () => ipcRenderer.sendSync('speech:callActive') as boolean,
+    onCallActive: (cb) => listen('speech:callActive', cb),
   },
   ssh: sshBridge,
   island: {

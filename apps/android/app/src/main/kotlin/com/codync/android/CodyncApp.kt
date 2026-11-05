@@ -13,6 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -101,12 +103,13 @@ private data class Editing<T>(val computerId: String, val draft: T)
     BackHandler(root == Root.Pairing && !signedIn) { welcomed = false }
     BackHandler(root == Root.Pairing && askable.isNotEmpty()) { pairingNew = false }
     val states = app.computers.mapNotNull { computers[it.id] }
+    val voiceOwner = activeVoiceState(states)
     val edit = { computerId: String, bot: Bot ->
         if (bot.kind == "group") groupEditor = Editing(computerId, GroupDraft.from(bot)) else editor = Editing(computerId, BotDraft.from(bot))
     }
     val openMarketplace = { id: String -> showAccount = false; showComputers = false; marketplace = id }
     // The sheets too: a bot's editor sets custom icons, which need sign-in.
-    CompositionLocalProvider(LocalAccounts provides accounts) {
+    CompositionLocalProvider(LocalAccounts provides accounts, LocalVoiceBusy provides (voiceOwner != null)) {
         Box(Modifier.fillMaxSize().background(Palette.background)) {
             AnimatedContent(root, transitionSpec = {
                 if ((initialState == Root.Welcome || initialState == Root.Choose) && targetState == Root.Pairing)
@@ -139,7 +142,18 @@ private data class Editing<T>(val computerId: String, val draft: T)
                         edit = edit, extensions = openMarketplace, tab = tab, onTab = { tab = it }, covered = showAccount || showComputers || showPairing || showUsage ||
                             marketplace != null || creating != null || access != null || editor != null || groupEditor != null || app.error != null) { chat ->
                         // A conversation, talking to the computer the bot lives on.
-                        accounts.store(chat.computer.id)?.let { store -> ChatScreen(chat, store) { bot -> edit(chat.computer.id, bot) } }
+                        accounts.store(chat.computer.id)?.let { store -> ChatScreen(chat, store, hasActiveVoice = voiceOwner != null) { bot -> edit(chat.computer.id, bot) } }
+                    }
+                }
+            }
+            // The service retains the original store; navigation only changes the conversation underneath.
+            AnimatedVisibility(voiceOwner != null, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 54.dp),
+                enter = fadeIn(Motion.fade()), exit = fadeOut(Motion.fade())) {
+                voiceOwner?.let { owner ->
+                    val call = owner.voice
+                    val store = accounts.store(owner.computer.id)
+                    if (call != null && store != null) key(call.id) {
+                        CallBar(call, owner, store) { closeAll(); tab = AppTab.Bots; store.openBot(call.botId) }
                     }
                 }
             }
@@ -213,6 +227,7 @@ private data class Editing<T>(val computerId: String, val draft: T)
 
 /** The account's store, for the few computer screens that also act on the account (custom icons need sign-in). */
 internal val LocalAccounts = staticCompositionLocalOf<AccountStore?> { null }
+internal val LocalVoiceBusy = staticCompositionLocalOf { false }
 
 /** [content] with computer [id]'s state and store, while both are there (a sheet of one computer). */
 @Composable private fun OnComputer(id: String, computers: Map<String, AppState>, accounts: AccountStore, content: @Composable (AppState, AppStore) -> Unit) {

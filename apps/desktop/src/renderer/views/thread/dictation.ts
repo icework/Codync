@@ -1,3 +1,4 @@
+import { callOwnsMicrophone } from '../call/call-microphone.ts'
 import type { CodyncBridge, SpeechEvent } from '../../../shared/ipc.ts'
 import { VoiceKeyRouter, type VoiceKey } from '../../../shared/voice-shortcut.ts'
 import { Observable } from '../../lib/observable.ts'
@@ -20,6 +21,8 @@ export interface DictationPlatform {
   noSpeech: string
   /** This window reaches a host, so it can dictate with a provider on the user's key. */
   host: boolean
+  /** Shared call ownership, including calls in another renderer. */
+  callActive?(): boolean
   /** The on-device recognizer's language; null is the computer's. */
   language(): string | null
   /** The provider picked beside the mic; null is on-device. */
@@ -93,7 +96,10 @@ export class Dictation extends Observable {
     return this.off !== null || this.recording !== null || this.transcribing
   }
 
+  private get callActive() { return callOwnsMicrophone() || this.platform.callActive?.() === true }
+
   start(draft: string, byShortcut = false) {
+    if (this.callActive) return
     active?.cancel()
     active = this
     this.byShortcut = byShortcut
@@ -139,6 +145,7 @@ export class Dictation extends Observable {
    * when it's a double tap that should start: the caller shows its field, then `start(draft, true)`.
    */
   shortcutKey(key: VoiceKey, send: () => void): boolean {
+    if (this.callActive) return false
     const action = this.keys.route(key, { byShortcut: this.byShortcut, busy: this.busy })
     if (action === 'send') this.finish(send)
     return action === 'start'
@@ -166,16 +173,23 @@ export class Dictation extends Observable {
     try {
       const hasKey = await this.platform.checkKey(recording.provider)
       if (generation !== this.generation) return
+      if (this.callActive) return this.cancel()
       if (!hasKey) {
         this.end()
         this.platform.configureKey(recording.provider)
         return
       }
       const stop = await this.platform.microphone((pcm, level) => {
-        recording.pcm.push(pcm)
-        this.level = level
+        if (generation === this.generation) {
+          recording.pcm.push(pcm)
+          this.level = level
+        }
       })
-      if (generation !== this.generation) return stop()
+      if (generation !== this.generation || this.callActive) {
+        stop()
+        if (generation === this.generation) this.cancel()
+        return
+      }
       recording.stopMic = stop
       this.listen()
     } catch (e) {

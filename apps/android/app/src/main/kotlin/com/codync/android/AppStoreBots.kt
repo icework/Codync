@@ -147,11 +147,24 @@ fun AppStore.retryRoutineRun(entry: Entry) = action("retry:" + entry.id) {
 }
 /** Queries belong to the account runtime as well as their screen; retiring either cancels them. */
 internal suspend fun AppStore.hostQuery(method: String, payload: JsonObject, timeoutMillis: Long = 20_000,
-    expectedGeneration: Int = state.value.generation): JsonElement {
+    expectedGeneration: Int = state.value.generation, expectedHostId: String? = null): JsonElement {
     val request = contextScope.async {
         check(state.value.generation == expectedGeneration) { "The active account changed." }
-        val active = ready()
+        var active = ready()
+        if (expectedHostId != null) {
+            withTimeout(20_000) {
+                while (voiceReadyChannel !== active) {
+                    delay(100)
+                    active = ready()
+                }
+            }
+        }
         check(state.value.generation == expectedGeneration) { "The active account changed." }
+        if (expectedHostId != null) {
+            check(voiceHostFailure(expectedHostId, state.value.hello?.text("hostId"), state.value.mismatch != null) == null) {
+                "Voice chat ended because the computer identity or compatibility changed."
+            }
+        }
         active.call(method, payload, timeoutMillis = timeoutMillis)
     }
     try { return request.await() } finally { request.cancel() }

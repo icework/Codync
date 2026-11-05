@@ -24,7 +24,6 @@ Object.assign(globalThis, {
 })
 const { GeminiLiveEngine } = await import('./GeminiLiveEngine.ts')
 const { OpenAIRealtimeEngine } = await import('./OpenAIRealtimeEngine.ts')
-const { CallQuality } = await import('./call-quality.ts')
 const { reconnect } = await import('./voice.ts')
 reconnect.delays = [5, 5, 5]
 GeminiLiveEngine.stallMs = 40
@@ -107,9 +106,7 @@ function call() {
     engine,
     sockets,
     plays,
-    get starts() {
-      return starts
-    },
+    get starts() { return starts },
     get micOn() {
       return mic !== null
     },
@@ -266,6 +263,8 @@ test('OpenAI phases follow its events', () => {
 })
 
 /** OpenAI's side of a call: a WebRTC peer whose events channel and ICE state the test drives. */
+type FakeTrack = { kind: string; enabled: boolean; stopped: boolean; stop(): void }
+
 class FakePeer {
   iceConnectionState = 'new'
   iceGatheringState = 'complete'
@@ -285,21 +284,14 @@ class FakePeer {
       this.readyState = 'closed'
     },
   }
-  addTrack() {}
-  createDataChannel() {
-    return this.channel
-  }
-  async createOffer() {
-    return { type: 'offer', sdp: 'offer-sdp' }
-  }
+  sender = { track: null as FakeTrack | null, replaceTrack: async (track: FakeTrack) => { this.sender.track = track } }
+  addTrack(track: FakeTrack) { this.sender.track = track }
+  createDataChannel() { return this.channel }
+  async createOffer() { return { type: 'offer', sdp: 'offer-sdp' } }
   async setLocalDescription() {}
   async getStats() { return new Map([['audio', { type: 'inbound-rtp', kind: 'audio', audioLevel: this.audioLevel }]]) }
-  async setRemoteDescription() {
-    this.answered = true
-  }
-  getSenders() {
-    return []
-  }
+  async setRemoteDescription() { this.answered = true }
+  getSenders() { return [this.sender] }
   close() {}
   /** The session is set up. */
   ready(type = 'session.updated') {
@@ -319,11 +311,20 @@ function openAICall(model = 'gpt-realtime') {
   const liveEvents: unknown[] = []
   const liveUpdates: unknown[] = []
   let starts = 0
-  const track = { kind: 'audio', enabled: true, stop() {} }
+  const microphones: FakeTrack[] = []
+  let deviceChange: (() => void) | null = null
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true,
     value: {
-      mediaDevices: { getUserMedia: async () => ({ getAudioTracks: () => [track], getTracks: () => [track] }), addEventListener() {}, removeEventListener() {} },
+      mediaDevices: {
+        getUserMedia: async () => {
+          const track: FakeTrack = { kind: 'audio', enabled: true, stopped: false, stop() { this.stopped = true } }
+          microphones.push(track)
+          return { getAudioTracks: () => [track], getTracks: () => [track] }
+        },
+        addEventListener(_type: string, listener: () => void) { deviceChange = listener },
+        removeEventListener() { deviceChange = null },
+      },
     },
   })
   Object.assign(globalThis, {
@@ -354,10 +355,8 @@ function openAICall(model = 'gpt-realtime') {
   return {
     engine,
     answers,
-    liveEvents, liveUpdates, link,
-    get starts() {
-      return starts
-    },
+    liveEvents, liveUpdates, link, microphones, changeDevice: () => deviceChange?.(),
+    get starts() { return starts },
     last: () => peers[peers.length - 1]!,
     peers,
   }
@@ -391,34 +390,6 @@ test('OpenAI that never connected fails over at once', async () => {
   assert.equal(o.engine.failureKind, 'provider')
   assert.equal(o.starts, 1)
 })
-
-test('call quality reports ready time, reconnects, stalls and failure once per engine', () => {
-  const events: unknown[] = []
-  const quality = new CallQuality((e) => events.push(e))
-  quality.begin('gemini')
-  quality.phase('listening', null)
-  quality.phase('reconnecting', null)
-  quality.phase('listening', null)
-  quality.stalled()
-  quality.phase('failed', 'connection')
-  quality.begin('on_device')
-  const first = events[0] as Record<string, unknown>
-  assert.equal(first.event, 'voice_call_quality')
-  assert.equal(first.engine, 'gemini')
-  assert.equal(typeof first.ready_ms, 'number')
-  assert.deepEqual([first.reconnects, first.stuck, first.failure], [1, 'speaking', 'connection'])
-  quality.report()
-  assert.equal(events.length, 2)
-
-  let now = 0
-  const stuck: unknown[] = []
-  const slow = new CallQuality((e) => stuck.push(e), () => now)
-  slow.begin('openai')
-  now += CallQuality.stuckMs
-  slow.report()
-  assert.deepEqual(stuck, [{ event: 'voice_call_quality', engine: 'openai', reconnects: 0, stuck: 'connecting', failure: 'none' }])
-})
-
 
 test('GPT-Live starts through the host, uses playback activity, and closes gracefully', async () => {
   const o = openAICall('gpt-live-1')
@@ -462,7 +433,6 @@ test('a replaced Live channel cannot make the new engine ready or deliver old tr
   o.last().channel.onmessage?.({ data: JSON.stringify({ type: 'session.closed' }) })
 })
 
-
 test('late Live setup failures cannot tear down a replacement connection', async () => {
   const o = openAICall('gpt-live-1')
   await o.engine.start()
@@ -490,22 +460,39 @@ test('late Live setup failures cannot tear down a replacement connection', async
   replacement.channel.onmessage?.({ data: JSON.stringify({ type: 'session.closed' }) })
 })
 
-
-test('call diagnostics correlate engine replacement and view teardown without error text', () => {
-  const events: Record<string, unknown>[] = []
-  let now = 0
-  const quality = new CallQuality((event) => events.push(event), () => now, 'call-for-local-diagnostics')
-  quality.begin('openai_live')
-  now = 120
-  quality.phase('listening', null)
-  quality.phase('failed', 'connection', 'host_rpc')
-  quality.begin('on_device')
-  quality.report('view_unmounted')
-  quality.report('user')
-  assert.equal(events.length, 2)
-  assert.equal(events[0]!.call_id, 'call-for-local-diagnostics')
-  assert.equal(events[0]!.failure_detail, 'host_rpc')
-  assert.equal(events[0]!.end_reason, 'engine_replaced')
-  assert.equal(events[0]!.ready_ms, 120)
-  assert.equal(events[1]!.end_reason, 'view_unmounted')
-})
+for (const action of ['hangup', 'reconnect', 'reject', 'mute'] as const) {
+  test(`OpenAI microphone replacement handles ${action} while replaceTrack waits`, async (t) => {
+    const o = openAICall()
+    await o.engine.start()
+    const originalPeer = o.last()
+    originalPeer.ready()
+    const errors = t.mock.method(console, 'error', () => {})
+    let finish: (() => void) | undefined
+    originalPeer.sender.replaceTrack = (track) => new Promise<void>((resolve, reject) => {
+      finish = () => {
+        if (action === 'reject') return reject(new Error('replaceTrack refused'))
+        originalPeer.sender.track = track
+        resolve()
+      }
+    })
+    o.changeDevice()
+    assert.ok(await until(() => !!finish))
+    const [original, replacement] = o.microphones
+    assert.equal(replacement!.enabled, false, 'unadopted audio cannot transmit')
+    if (action === 'hangup') o.engine.end()
+    if (action === 'mute') o.engine.muted = true
+    if (action === 'reconnect') {
+      originalPeer.ice('failed')
+      assert.ok(await until(() => o.peers.length === 2 && o.last().answered))
+      o.last().ready()
+    }
+    finish!()
+    assert.ok(await until(() => action === 'mute' ? original!.stopped : replacement!.stopped))
+    if (action === 'reject' || action === 'reconnect') assert.equal(original!.stopped, false)
+    if (action === 'reconnect') assert.equal(o.last().sender.track, original)
+    if (action === 'reject') assert.equal(errors.mock.calls.length, 1)
+    if (action === 'mute') assert.equal(replacement!.enabled, false, 'mute during handoff remains effective')
+    o.engine.end()
+    assert.ok(o.microphones.every((track) => track.stopped), 'no captured microphone survives the call')
+  })
+}

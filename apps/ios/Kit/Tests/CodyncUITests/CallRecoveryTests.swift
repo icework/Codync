@@ -105,6 +105,8 @@ final class GeminiCall {
         self.suite = suite
         let fake = self.fake
         store = BotStore(computer: randomComputer("Mac"), storage: storage) { _ in fake }
+        // Calls start only after a host identity is known; the scripted hello uses h1.
+        store.hostId = "h1"
         store.setActive(true)
         let link = CallLink(model: store, botId: "b1", call: UUID().uuidString)
         let sockets = self.sockets

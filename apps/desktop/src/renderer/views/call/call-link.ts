@@ -1,3 +1,5 @@
+import { CallDestination } from './call-destination'
+import type { HostClient } from '../../client/host-client'
 import type { VoiceEndReason } from '@shared/analytics'
 import type { CallLine } from '@shared/calls'
 import { sleep } from '../../store/bot-sync'
@@ -23,6 +25,7 @@ export interface CallSession {
  * transcript live there; the engines only carry audio. One per call, so it outlives an engine switch.
  */
 export class CallLink {
+  private destination: CallDestination
   private lines: CallLine[] = []
   private open = false
   /** The user's last words are still being written down (OpenAI transcribes them after the turn). */
@@ -36,32 +39,45 @@ export class CallLink {
     readonly botId: string,
     /** The call's id: what it sends the bot carries it. */
     readonly call: string,
-  ) {}
+    expectedHostIdentity: string | null = store.hostIdentity,
+  ) {
+    this.destination = new CallDestination(expectedHostIdentity, () => ({ identity: store.hostIdentity, incompatible: !!store.mismatch }))
+  }
+
+  assertDestination = () => this.destination.check()
+
+  async client(): Promise<HostClient> {
+    this.assertDestination()
+    const client = await this.store.ready()
+    this.assertDestination()
+    return client
+  }
 
   /** Starts the call on the computer (again, when a provider session is replaced): what the voice needs. */
   async start(mode: 'realtime' | 'speech' | 'device', provider: VoiceProvider | null = null, model?: string, voice?: string) {
-    const client = await this.store.ready()
+    const client = await this.client()
     return client.call<CallSession>('startCall', {
       botId: this.botId, callId: this.call, mode, provider, model, voice, language: navigator.language,
     }, 30_000)
   }
 
   async startLive(model: string, voice: string, sdp: string) {
-    const client = await this.store.ready()
+    const client = await this.client()
     await requireLiveHost(client)
+    this.assertDestination()
     return client.call<{ sessionId: string; sdp: string }>('startLiveCall', {
       botId: this.botId, callId: this.call, model, voice, sdp, language: navigator.language,
     }, 30_000)
   }
 
   async liveEvent(sessionId: string, event: unknown) {
-    return (await this.store.ready()).call<{ events: unknown[] }>('callLiveEvent', {
+    return (await this.client()).call<{ events: unknown[] }>('callLiveEvent', {
       callId: this.call, sessionId, event,
     }, 60_000)
   }
 
   async liveUpdate(sessionId: string, kind: 'reply' | 'notice' | 'progress', text: string) {
-    return (await this.store.ready()).call<{ events: unknown[] }>('callLiveUpdate', {
+    return (await this.client()).call<{ events: unknown[] }>('callLiveUpdate', {
       callId: this.call, sessionId, kind, text,
     }, 30_000)
   }
@@ -73,7 +89,7 @@ export class CallLink {
     return this.serial(async () => {
       const lines = this.drain(true)
       try {
-        const client = await this.store.ready()
+        const client = await this.client()
         return (await client.call<{ result: unknown }>('callTool', { callId: this.call, name, arguments: args ?? {}, lines }, 60_000)).result
       } catch (e) {
         this.restore(lines)
@@ -109,7 +125,7 @@ export class CallLink {
       const lines = this.drain(false)
       if (!lines.length) return
       try {
-        await (await this.store.ready()).call('callLines', { callId: this.call, lines })
+        await (await this.client()).call('callLines', { callId: this.call, lines })
       } catch {
         this.restore(lines)
       }
@@ -134,7 +150,7 @@ export class CallLink {
   end(seconds: number, after: Promise<void> = Promise.resolve(), reason?: VoiceEndReason) {
     void this.serial(async () => {
       await after
-      await this.store.endCall(this.botId, this.call, seconds, this.drain(true), reason)
+      await this.store.endCall(this.botId, this.call, seconds, this.drain(true), reason, this.assertDestination)
     })
   }
 

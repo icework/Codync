@@ -193,6 +193,9 @@ export interface CodyncBridge {
     setShortcut(shortcut: VoiceShortcut): Promise<VoiceShortcut>
     /** A call is on (or over): it has the microphone, so the voice input shortcut does nothing meanwhile. */
     setCalling(on: boolean): void
+    /** Main-process call ownership, shared across chat and Island renderers; no call details. */
+    callActive(): boolean
+    onCallActive(cb: (active: boolean) => void): () => void
   }
   ssh: SSHBridge
   /** The notch island (shared/island.ts): its setting, the chat window's summary, and the island window's side. */

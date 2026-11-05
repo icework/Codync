@@ -15,6 +15,7 @@ struct RootView: View {
     @State private var pairingNew = false
     /// The account computer the choice page is asking for access.
     @State private var asking: CloudComputer?
+    @State private var voiceCall = ActiveVoiceCall()
 
     /// The open bot, as a NavigationStack path.
     private var path: Binding<[BotReference]> {
@@ -34,6 +35,7 @@ struct RootView: View {
             }
         }
         .background(Palette.background)
+        .safeAreaInset(edge: .top, spacing: 0) { ActiveVoiceCallView(call: voiceCall) }
         .reviewInvitation()
         .onChange(of: accounts.computers.isEmpty, initial: true) { _, empty in
             // Reaching a computer (paired, or approved through the account) or explicitly skipping completes
@@ -60,6 +62,7 @@ struct RootView: View {
                     .environment(store)
             }
         }
+        .environment(voiceCall)
     }
 
     /// First run, until a computer is reached or setup is skipped.

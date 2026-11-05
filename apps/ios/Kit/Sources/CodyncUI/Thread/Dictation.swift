@@ -43,6 +43,9 @@ struct DictationService {
 /// transcript goes after what's in the box by then.
 @MainActor @Observable
 final class Dictation {
+    private static weak var active: Dictation?
+    static func stopActive() { active?.stop() }
+
     private(set) var listening = false
     /// Recorded for a provider, waiting for its transcript.
     private(set) var transcribing = false
@@ -69,9 +72,11 @@ final class Dictation {
     /// result from an earlier recognition is dropped.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private let service: DictationService
+    @ObservationIgnored private let usesSystemMicrophone: Bool
 
-    init(service: DictationService = .live) {
-        self.service = service
+    init(service: DictationService? = nil) {
+        self.service = service ?? .live
+        usesSystemMicrophone = service == nil
     }
 
     /// A transcription request has to fit one channel message once base64-encoded: 20 s of audio
@@ -93,6 +98,10 @@ final class Dictation {
     /// computer. A `stop()` (another chat, a call, a send) or another tap while it waits wins.
     func start(after draft: String, model: BotStore, edit: @escaping ((String) -> String) -> Void) async {
         guard !listening, !transcribing else { return }
+        if usesSystemMicrophone {
+            Self.stopActive()
+            Self.active = self
+        }
         failure = nil
         needsKey = false
         generation += 1
@@ -127,6 +136,7 @@ final class Dictation {
 
     /// Stops now and drops anything still on its way.
     func stop() {
+        if Self.active === self { Self.active = nil }
         generation += 1
         transcription?.cancel()
         transcription = nil

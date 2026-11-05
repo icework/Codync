@@ -42,6 +42,8 @@ export class BotSync extends BotMirror {
   private heldDrop: Connection | null = null
   private dropTimer: ReturnType<typeof setTimeout> | null = null
   private closeEvents: (() => void) | null = null
+  /** A cached online badge must not authorize RPCs on a newly connected, unverified transport. */
+  private verifiedClient: HostClient | null = null
   private eventsLoop = 0
   private rewound = false
   /** The `since` the current events connection asked for, and the per-bot floors snapshotted at its `hello`. */
@@ -92,6 +94,7 @@ export class BotSync extends BotMirror {
   }
 
   private stopTransport() {
+    this.verifiedClient = null
     this.finishRefresh?.()
     this.eventsLoop++
     this.closeEvents?.()
@@ -139,6 +142,7 @@ export class BotSync extends BotMirror {
     const alive = () => loop === this.eventsLoop && !this.retired
     const attempt = async () => {
       if (!alive()) return
+      this.verifiedClient = null
       try {
         await this.refreshHello(client, loop)
         if (!alive()) return
@@ -185,6 +189,7 @@ export class BotSync extends BotMirror {
         if (error instanceof HostError && error.status === 401) return
       }
       if (!alive()) return
+      this.verifiedClient = null
       await sleep(backoff)
       backoff = Math.min(backoff * 2, 20_000)
       void attempt()
@@ -208,6 +213,9 @@ export class BotSync extends BotMirror {
     this.applyIcons(h.icons ?? {}, h.iconsRevision)
     this.noteHostVersion({ version: h.version, minApp: h.minApp })
     if (this.isLoopback) this.updateComputer((c) => ({ ...c, name: h.name, device: h.device ?? c.device }))
+    if (this.retired || loop !== this.eventsLoop || epoch !== this.iconsEpoch) return
+    if (!h.hostId) throw new HostError(0, trNow('The computer did not confirm its identity.'))
+    this.verifiedClient = client
     this.changed()
   }
 
@@ -347,7 +355,7 @@ export class BotSync extends BotMirror {
   // MARK: link
 
   protected get live(): HostClient | null {
-    return this.connection.kind === 'online' && !this.heldDrop && !this.retired ? this.client : null
+    return this.connection.kind === 'online' && !this.heldDrop && !this.retired && this.client === this.verifiedClient ? this.client : null
   }
 
   /** The client once the link is up. A reconnect in progress is waited out (headers show it). */

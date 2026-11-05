@@ -58,7 +58,7 @@ const bridge: CodyncBridge = {
     deleteAccount: async () => false,
     token: unavailable,
   },
-  speech: { available: false, locales: () => [], start() {}, stop() {}, onEvent: none, shortcut: async () => 'off', setShortcut: async () => 'off', setCalling() {} },
+  speech: { available: false, locales: () => [], start() {}, stop() {}, onEvent: none, shortcut: async () => 'off', setShortcut: async () => 'off', setCalling() {}, callActive: () => false, onCallActive: none },
   ssh: {
     state: async () => ({ profiles: [], status: {}, attachments: [], needsLinger: [] }),
     onChange: none,

@@ -31,7 +31,7 @@ host logs into public reports; other existing log categories may contain private
 Client quality keeps the existing ready_ms/reconnects/stuck/failure analytics and
 adds enum-only end_reason and failure_detail. Live distinguishes session_closed,
 provider_error, host_rpc and queue_full; it never logs the free-form failure string.
-`view_unmounted` describes the observed React lifecycle, not why the view went away.
+`view_unmounted` describes destruction of the global call owner, not ordinary bot navigation or the underlying reason that owner went away.
 A crash or lost local Host connection can prevent delivery; missing logs are not proof
 that an event did not happen. Existing host log lifecycle/retention applies. Transcript
 fragments are not logged individually (only the first input/output timestamp), so

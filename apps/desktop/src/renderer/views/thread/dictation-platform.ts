@@ -4,7 +4,9 @@ import { useModel } from '../../lib/observable'
 import { useStoreRef } from '../../store/context'
 import { countVoiceUsage, micPCM16k, onDeviceUnavailableReason, transcribeOnHost, VoiceSettings, wav } from '../call/voice'
 import { configured, voiceStatus } from '../settings/voice-settings'
-import { Dictation, type DictationPlatform } from './dictation'
+import { Dictation, stopDictation, type DictationPlatform } from './dictation'
+
+let observingCalls = false
 import { trNow } from '../../lib/l10n.ts'
 
 /**
@@ -12,6 +14,10 @@ import { trNow } from '../../lib/l10n.ts'
  * on the user's key through it; `report` shows its errors (the island has neither).
  */
 export function dictationPlatform(host: (() => Promise<HostClient>) | null = null, report: (message: string) => void = () => {}, configureKey: () => void = () => {}): DictationPlatform {
+  if (!observingCalls) {
+    observingCalls = true
+    window.codync.speech.onCallActive((active) => { if (active) stopDictation() })
+  }
   const client = async () => {
     if (!host) throw new Error(trNow('Dictating with a provider needs the chat window.'))
     return host()
@@ -21,6 +27,7 @@ export function dictationPlatform(host: (() => Promise<HostClient>) | null = nul
     // Read when shown, so a language change since the window opened applies.
     get noSpeech() { return onDeviceUnavailableReason() },
     host: host !== null,
+    callActive: () => window.codync.speech.callActive(),
     language: () => VoiceSettings.language() || null,
     provider: VoiceSettings.dictationProvider,
     async checkKey(provider) {

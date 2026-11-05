@@ -2,7 +2,7 @@ import { isLiveModel } from './openai-live-session'
 import type { VoiceCallEngine } from '@shared/analytics'
 import type { CallCue } from '@shared/calls'
 import { isWorking } from '@shared/models'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BotAvatar } from '../../components/Avatar'
 import { Icon } from '../../components/Icon'
 import { LevelDots } from '../../components/LevelDots'
@@ -10,12 +10,13 @@ import { Sheet } from '../../components/Overlay'
 import { Text } from '../../components/Text'
 import { useModel } from '../../lib/observable'
 import { analytics } from '../../store/analytics'
-import { useStore } from '../../store/context'
+import { useApp, useStore } from '../../store/context'
 import { VoiceChatSettingsView } from '../settings/VoiceChatSettingsView'
 import { engine as preferredEngine, voiceStatus } from '../settings/voice-settings'
 import { stopDictation } from '../thread/dictation'
 import { CallLink } from './call-link'
 import { CallQuality } from './call-quality'
+import { CallCueBuffer } from './call-cue-buffer'
 import { CloudSpeechEngine } from './CloudSpeechEngine'
 import { GeminiLiveEngine } from './GeminiLiveEngine'
 import { OnDeviceEngine } from './OnDeviceEngine'
@@ -44,25 +45,22 @@ function statusText(phase: VoicePhase | null, muted: boolean, working: boolean) 
 }
 
 /**
- * Opens the window's own Settings at Voice chat; without it (no Settings screen around) the
- * call bar shows the voice settings in their own sheet.
- */
-export const OpenVoiceSettings = createContext<(() => void) | null>(null)
-
-/**
  * A voice call with a bot, as Grok Bot does it: a floating bar over the chat, which stays
  * readable underneath. The computer runs the call (`CallLink`): what you say reaches the bot as
  * the call's messages, its final replies are read aloud, and the call ends as one titled line
  * ("Release plan · 00:16") that opens its conversation.
  */
-export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
+export function CallView({ botId, expectedHostIdentity, onSpeaking, interrupt, onEnd, onReturn }: {
   botId: string
+  expectedHostIdentity: string
   onSpeaking: (speaking: boolean) => void
   interrupt: { current: (() => void) | null }
   onEnd: () => void
+  onReturn: () => void
 }) {
   const tr = useTr()
   const store = useStore()
+  const app = useApp()
   const [session, setSession] = useState<VoiceEngine | null>(null)
   useModel(session)
   /** One line under the bar, e.g. why the call fell back to another voice. */
@@ -70,7 +68,11 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
   /** No engine could start at all. */
   const [blocked, setBlocked] = useState<string | null>(null)
   const [settings, setSettings] = useState(false)
-  const openVoiceSettings = useContext(OpenVoiceSettings)
+  const cues = useRef<CallCueBuffer | null>(null)
+  cues.current ??= new CallCueBuffer(() => {
+    app.setError(trNow('Voice chat ended because too many replies were waiting for audio. Read the call in chat.'))
+    onEnd()
+  })
   const engine = useRef<VoiceEngine | null>(null)
   /** When the current cloud engine started, for this month's minutes. */
   const cloudStartedAt = useRef<number | null>(null)
@@ -85,7 +87,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
   const bot = store.bots.get(botId)
   /** The call on the computer, which runs it. */
   const link = useRef<CallLink | null>(null)
-  link.current ??= new CallLink(store, botId, crypto.randomUUID())
+  link.current ??= new CallLink(store, botId, crypto.randomUUID(), expectedHostIdentity)
   /** Each engine's `voice_call_quality`. */
   const quality = useRef<CallQuality | null>(null)
   quality.current ??= new CallQuality((event) => analytics.track(event), Date.now, link.current.call)
@@ -105,7 +107,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
     engineChoice.current = VoiceSettings.engineChoice(provider)
     if (!provider && !onDeviceAvailable()) return void fallbackFromDevice()
     const call = link.current!
-    const send = (text: string) => store.send(text, botId, { call: call.call })
+    const send = (text: string) => store.send(text, botId, { call: call.call, validateDestination: call.assertDestination })
     let next: VoiceEngine
     if (provider && VoiceSettings.isSpeechMode(provider)) {
       const transcribe = VoiceSettings.transcribeModel(provider)
@@ -113,9 +115,9 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
       const voice = VoiceSettings.voice(provider)
       next = new CloudSpeechEngine(provider, {
         // ponytail: kit turns Simplified Chinese transcripts into Traditional (ICU Hans-Hant); Chromium has no such transform.
-        transcribe: async (audio) => transcribeOnHost(await store.ready(), provider, transcribe, audio),
+        transcribe: async (audio) => transcribeOnHost(await call.client(), provider, transcribe, audio),
         speak: async (text) => {
-          const clip = await (await store.ready()).call<{ audio: string; format: string }>('voiceSpeak', { provider, model: speechModel, voice, text }, 90_000)
+          const clip = await (await call.client()).call<{ audio: string; format: string }>('voiceSpeak', { provider, model: speechModel, voice, text }, 90_000)
           return { audio: fromBase64(clip.audio), format: clip.format }
         },
         send,
@@ -145,8 +147,8 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
     // The computer decides what the voice hears (host chat/calls/announce); the engine only says it.
     const hear = (cue: CallCue) => next.hear(cue)
     next.onActivityChanged = (active) => {
-      if (active) store.callCues.set(call.call, hear)
-      else if (store.callCues.get(call.call) === hear) store.callCues.delete(call.call)
+      if (active && engine.current === next) cues.current!.activate(hear)
+      else cues.current!.pause(hear)
     }
     // A muted call stays muted on the engine that takes over.
     next.muted = engine.current?.muted === true
@@ -206,11 +208,14 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
 
   useEffect(() => {
     const startedAt = Date.now()
+    store.callCues.set(link.current!.call, cues.current!.receive)
     window.codync.speech.setCalling(true)
     begin(VoiceSettings.provider())
     return () => {
       window.codync.speech.setCalling(false)
       closed.current = true
+      if (store.callCues.get(link.current!.call) === cues.current!.receive) store.callCues.delete(link.current!.call)
+      cues.current!.stop()
       engine.current?.end()
       countCloudMinutes()
       onSpeaking(false)
@@ -231,7 +236,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
     if (session.isActive && !counted.current) {
       counted.current = true
       analytics.track({ event: 'voice_call_started', engine: engineName.current })
-      store.callStarted(botId, link.current!.call)
+      store.callStarted(botId, link.current!.call, link.current!.assertDestination)
     }
     // A cloud engine that can't start or drops mid-call hands over to on-device voice.
     if (phase === 'failed' && session.provider && onDeviceAvailable()) {
@@ -259,6 +264,10 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
         >
           {bot ? <BotAvatar bot={bot} size={34} /> : <span className="call-avatar-empty" />}
         </button>
+        <button className="call-destination" onClick={onReturn} title={bot?.name ?? tr('Voice chat')}>
+          <Text size="caption" weight="semibold" truncate>{bot?.name ?? tr('Voice chat')}</Text>
+          <Text size="caption2" tone="secondary" truncate>{store.hostName}</Text>
+        </button>
         <LevelDots
           sample={() => ({ level: session?.level ?? 0, speaking: session?.phase === 'speaking', working, connecting: connecting && !blocked })}
           width={120}
@@ -271,7 +280,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
             {providerName(session.provider)}
           </Text>
         ) : null}
-        <button className="call-round" title="Call settings" aria-label="Call settings" onClick={() => (openVoiceSettings ? openVoiceSettings() : setSettings(true))}>
+        <button className="call-round" title="Call settings" aria-label="Call settings" onClick={() => setSettings(true)}>
           <Icon name="gearshape" size={16} weight="medium" scaled={false} />
         </button>
         <button

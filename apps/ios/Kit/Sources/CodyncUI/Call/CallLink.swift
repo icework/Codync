@@ -15,6 +15,7 @@ final class CallLink {
     let botId: String
     /// The call's id: what it sends the bot carries it.
     let call: String
+    let hostId: String?
     private var lines: [CallLine] = []
     private var open = false
     /// The user's last words are still being written down (OpenAI transcribes them after the turn).
@@ -27,11 +28,20 @@ final class CallLink {
         self.model = model
         self.botId = botId
         self.call = call
+        self.hostId = model.hostId
     }
 
-    func client() throws -> HostClient {
-        guard let client = model.client else { throw VoiceError("Not connected to \(model.hostName).") }
+    func client() async throws -> HostClient {
+        let client = try await model.ready()
+        guard !model.retired, let hostId, model.hostId == hostId, model.mismatch == nil else {
+            throw VoiceError("Voice chat ended because the computer identity or compatibility changed.")
+        }
         return client
+    }
+
+    func send(_ text: String) {
+        guard !model.retired, let hostId, model.hostId == hostId, model.mismatch == nil else { return }
+        model.send(text, to: botId, call: call)
     }
 
     /// Starts the call on the computer (again, when a provider session is replaced): what the voice needs.
@@ -105,7 +115,7 @@ final class CallLink {
         model.beginCallEnd()
         serial { [self] in
             await finish()
-            await model.endCall(botId, seconds: seconds, call: call, lines: drain(withOpen: true))
+            await model.endCall(botId, seconds: seconds, call: call, lines: drain(withOpen: true), expectedHostId: hostId)
             model.finishCallEnd()
         }
     }

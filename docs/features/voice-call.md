@@ -509,3 +509,37 @@ RPC shapes/floors. No mobile source/UI changes or phone installation are require
 Desktop-only lifecycle diagnostics identify its React view teardown and engine
 replacement; the terminal has no voice engine. Existing iOS/Android quality telemetry
 is unchanged and does not claim the new desktop teardown detail.
+
+
+### Persistent calls across navigation (personal clients)
+
+A call belongs to the app's stable UI owner, not the selected conversation.
+Desktop keeps its CallView above ChatWindow's navigation/recovery branches; iOS
+keeps it at RootView; Android exposes its existing service-backed call at CodyncApp.
+The visible bar names the original bot and computer, returns to that conversation,
+and keeps mute, interrupt, settings and hangup available while another bot is open.
+The call's Host/Store never follows the newly selected bot. Its gear uses that
+original computer's voice settings. Only one call can own the device's microphone;
+dictation cannot start while it does, including the desktop Island renderer.
+Closing a desktop window hides it as before and does not end its call.
+
+Deleting the target, signing out or replacing its account/Host/Store ends the call;
+this avoids sending voice to a replacement identity or a retired connection. Normal
+same-Store event-stream reconnects do not unmount it. Rebuilding an SSH attachment
+can replace its Store and still ends it with an explicit notice; this change does
+not promise seamless handoff across every transport replacement.
+
+Reply/notice cues are kept in a bounded call-level queue while a voice engine starts
+or is replaced; newer progress supersedes older progress. Delivery pauses if the
+receiving engine changes mid-drain. Overflow ends the call visibly and points to
+chat, rather than silently allowing an unlimited queue. Handing a cue to an engine
+is not proof of audible playback: recovery after a Host RPC fails inside a Live
+engine remains separate work and must not blindly retry tool side effects.
+
+Existing voice-call-started and quality analytics continue to describe use/outcome;
+local lifecycle logs distinguish explicit hangup from destruction of the global
+call owner. Page navigation alone no longer produces endCall/view_unmounted.
+These are client lifecycle changes; Host RPC shapes and compatibility floors stay
+unchanged, so the upstream production mobile app can still use the personal Host.
+Older phone binaries do not gain the new navigation controls merely by updating a
+Mac. The terminal has no voice engine or microphone controls and is unaffected.

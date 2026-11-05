@@ -66,19 +66,21 @@ internal fun openAppSettings(context: android.content.Context) =
  * A voice call with a bot (iOS `CallView`): a floating glass bar over the chat, which stays readable
  * underneath. What you say goes out as ordinary messages; its final replies are read aloud.
  */
-@Composable internal fun CallBar(call: VoiceCallViewState, state: AppState, store: AppStore) {
+@Composable internal fun CallBar(call: VoiceCallViewState, state: AppState, store: AppStore, openConversation: () -> Unit) {
     val voice = call.state
     val bot = state.bots.firstOrNull { it.id == call.botId }
     var settings by remember { mutableStateOf(false) }
     val speaking = voice.phase == VoicePhase.Speaking
     Column(Modifier.padding(horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("${bot?.name.orEmpty()} · ${state.hostName}", Modifier.plainButton(action = openConversation),
+            style = Type.caption2.semibold, color = Palette.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Row(Modifier.fillMaxWidth().glass(Capsule()).padding(start = 14.dp, end = 7.dp, top = 7.dp, bottom = 7.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // The bot; tapping it while it talks cuts the reply short, otherwise it opens the call's chat.
             val pulse by rememberInfiniteTransition(label = "Speaking").animateFloat(1f, 1.1f,
                 infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "Pulse")
             Box(Modifier.graphicsLayer { val s = if (speaking) pulse else 1f; scaleX = s; scaleY = s }
-                .plainButton { if (speaking) store.interruptVoice() else if (state.selectedBot != call.botId) store.openBot(call.botId) }
+                .plainButton { if (speaking) store.interruptVoice() else openConversation() }
                 .semantics { contentDescription = if (speaking) "Interrupt" else bot?.name.orEmpty() }) {
                 if (bot != null) BotAvatar(bot, state.bots, 34.dp)
             }

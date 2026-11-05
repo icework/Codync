@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import { app, ipcMain, type WebContents } from 'electron'
+import { app, ipcMain } from 'electron'
 import { CommandTaps, DEFAULT_VOICE_SHORTCUT, VOICE_SHORTCUTS, type VoiceKey, type VoiceShortcut } from '../shared/voice-shortcut'
 import { prefs } from './host-controller'
-import { speechAvailable } from './speech'
+import { callAudioActive, speechAvailable } from './speech'
 
 // Every modifier change in any app, from an NSEvent global monitor, with the seconds since the
 // last key press or click. Neither needs the Accessibility or Input Monitoring grant (other keys
@@ -48,8 +48,6 @@ function watchTaps(shortcut: Exclude<VoiceShortcut, 'off'>, onKey: (key: VoiceKe
  */
 export class VoiceShortcutKeys {
   private stop: (() => void) | null = null
-  /** The window with a call on: the call has the microphone, so taps do nothing meanwhile. */
-  private call: WebContents | null = null
 
   constructor(private onKey: (key: VoiceKey) => void) {}
 
@@ -66,11 +64,6 @@ export class VoiceShortcutKeys {
       this.sync()
       return this.shortcut
     })
-    ipcMain.on('voice:calling', (e, on: boolean) => (this.call = on ? e.sender : null))
-    // A page that crashed mid-call never says the call ended; its reload starts without one.
-    app.on('render-process-gone', (_e, contents) => {
-      if (contents === this.call) this.call = null
-    })
     app.on('will-quit', () => this.stop?.())
     this.sync()
   }
@@ -81,7 +74,7 @@ export class VoiceShortcutKeys {
     const shortcut = this.shortcut
     if (shortcut === 'off') return
     this.stop = watchTaps(shortcut, (key) => {
-      if (!this.call || this.call.isDestroyed()) this.onKey(key)
+      if (!callAudioActive()) this.onKey(key)
     })
   }
 }

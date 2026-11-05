@@ -18,9 +18,7 @@ public struct ThreadView: View {
     @State var openCall: Entry?
     @State var editingGroup = false
     @State var details: DetailsRequest?
-    @State var calling = false
-    @State var callSpeaking = false
-    @State var interruptCall: (() -> Void)?
+    @Environment(ActiveVoiceCall.self) var voiceCall
     /// The chat stays on the newest message until the reader scrolls away.
     @State var following = true
     @State var loadingEarlier = false
@@ -44,23 +42,13 @@ public struct ThreadView: View {
                 } else {
                     Composer(botId: botId, replyingTo: $replyingTo,
                              queued: model.chat(botId).hidingCalls().queue(working: busy),
-                             onCall: !calling && bot != nil ? { calling = true } : nil,
-                             onInterrupt: callSpeaking ? interruptCall : nil)
+                             onCall: voiceCall.canStart && bot != nil ? { voiceCall.start(store: model, botId: botId) } : nil,
+                             onInterrupt: voiceCall.isTarget(store: model, botId: botId) && voiceCall.isSpeaking ? voiceCall.interrupt : nil)
                 }
             }
             .animation(Motion.reduced(Motion.layout, reduceMotion), value: model.mismatch)
         }
-        // Grok Bot's call: a bar floating over the chat, which stays readable and usable.
-        .overlay(alignment: .top) {
-            if calling {
-                CallView(botId: botId, isSpeaking: $callSpeaking, interrupt: $interruptCall) {
-                    withAnimation(Motion.reduced(Motion.layout, reduceMotion)) { calling = false }
-                }
-                    .padding(.top, 4)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(Motion.reduced(Motion.layout, reduceMotion), value: calling)
+
     }
 
     var conversation: some View {
@@ -96,7 +84,7 @@ public struct ThreadView: View {
         editingGroup = false
         details = nil
         if model.fileDownloads.export?.botId == botId { model.fileDownloads.dismissExport() }
-        withAnimation(Motion.reduced(Motion.layout, reduceMotion)) { calling = true }
+        withAnimation(Motion.reduced(Motion.layout, reduceMotion)) { voiceCall.start(store: model, botId: botId) }
     }
 
     // MARK: rows

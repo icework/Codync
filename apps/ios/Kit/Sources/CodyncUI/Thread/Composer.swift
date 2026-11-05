@@ -36,6 +36,7 @@ struct Composer: View {
     @State private var photoItems: [PhotosPickerItem] = []
     @FocusState private var focused: Bool
     @State private var dictation = Dictation()
+    @Environment(ActiveVoiceCall.self) private var voiceCall
     /// One line of the field's text, following Dynamic Type: the send button centers on the last line.
     @ScaledMetric(relativeTo: .body) private var lineHeight: CGFloat = 22
 
@@ -238,6 +239,7 @@ struct Composer: View {
                 HStack(spacing: 0) {
                     Button {
                         Task {
+                            guard voiceCall.canStart else { return }
                             await dictation.start(after: draft, model: model) { change in draft = change(draft) }
                         }
                     } label: {
@@ -248,6 +250,7 @@ struct Composer: View {
                             .contentShape(Circle())
                     }
                     .buttonStyle(PressScale())
+                    .disabled(!voiceCall.canStart)
                     .accessibilityLabel("Dictate")
                     .help("Dictate")
                     DictationEngineMenu(height: buttonSize)
@@ -290,6 +293,7 @@ struct Composer: View {
         .onChange(of: botId) { replyingTo = nil }
         .onChange(of: replyingTo?.id) { if replyingTo != nil { focused = true } }
         .onDisappear { dictation.stop() }
+        .onChange(of: voiceCall.canStart) { _, allowed in if !allowed { dictation.stop() } }
         .onChange(of: draft) { _, value in
             model.setComposerDraft(value, for: draftKey)
             // Starting a command: list the computer's skills again.

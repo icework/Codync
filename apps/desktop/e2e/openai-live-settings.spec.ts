@@ -56,7 +56,7 @@ test('the host call ends only after received Live transcripts finish forwarding'
       const { OpenAILiveSession } = await import(sessionPath)
       const order: string[] = []
       let release: (() => void) | undefined
-      const link = new CallLink({ endCall: async () => { order.push('endCall') } }, 'fixture-bot', 'fixture-call')
+      const link = new CallLink({ hostIdentity: 'fixture-host', mismatch: null, endCall: async () => { order.push('endCall') } }, 'fixture-bot', 'fixture-call')
       const session = new OpenAILiveSession({
         startLive: async () => ({ sessionId: 'fixture-session', sdp: 'v=0' }),
         liveEvent: async () => {

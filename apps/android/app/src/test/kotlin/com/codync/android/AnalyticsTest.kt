@@ -11,6 +11,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class AnalyticsTest {
+    @Test fun liveEngineHasItsOwnBoundedAnalyticsValue() {
+        assertEquals("openai_live", VoiceEngineKind.OpenAILive.wire)
+    }
+
     @Test fun `the computer tag matches the host's hash`() {
         // sha256("codync-analytics:<id>")[0..8], as host/src/analytics.rs and the iPhone compute it.
         assertEquals("fbfcd4f4fe9f876c", Analytics.computerTag("tZ1WMzsVltt-fj7mUDwZsg"))

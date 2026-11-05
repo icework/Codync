@@ -193,7 +193,7 @@ function ProviderVoiceSettings({ provider, dictationOnly = false }: { provider: 
         if (dictationOnly) await voice.voiceModels(client, provider)
         else if (speechMode) await voice.voiceSpeak(client, provider, speechModel, chosenVoice, 'OK')
         else await voice.voiceSession(client, provider, model, chosenVoice)
-        setResult({ ok: true, text: tr('Key works') })
+        setResult({ ok: true, text: !dictationOnly && !speechMode && provider === 'openai' && model.startsWith('gpt-live-') ? tr('Model access verified') : tr('Key works') })
       } else {
         if (!(client.transport instanceof LoopbackTransport)) return
         setSaved(voice.configured(await voice.setVoiceKey(client, provider, typed), provider))
@@ -222,6 +222,7 @@ function ProviderVoiceSettings({ provider, dictationOnly = false }: { provider: 
   let footer: string | null = null
   if (!hasKey) footer = `Add a key to choose from ${info.name}'s models.`
   else if (dictationOnly) footer = tr('For dictation in the message box.')
+  else if (!speechMode && provider === 'openai' && model.startsWith('gpt-live-')) footer = tr('GPT-Live voice and the Responses tool router are billed separately by OpenAI.')
   const keyArea = (
     <VStack key="key" gap={8}>
       {hasKey && !replacing ? (

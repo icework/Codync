@@ -154,6 +154,8 @@ export abstract class VoiceEngine extends Observable {
   abstract start(): Promise<void>
   /** Idempotent. */
   abstract end(): void
+  /** Bounded final transcript delivery, before the host finalizes the call. */
+  async awaitEnd(): Promise<void> {}
   /** Cuts what's being said short. */
   abstract interrupt(): void
   /** A new final reply from the bot to say. */

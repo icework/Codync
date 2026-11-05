@@ -1,3 +1,4 @@
+import { isLiveModel } from './openai-live-session'
 import type { VoiceCallEngine } from '@shared/analytics'
 import type { CallCue } from '@shared/calls'
 import { isWorking } from '@shared/models'
@@ -79,6 +80,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
   /** What carries the current engine's audio, and whether the call has been counted (once its first engine runs). */
   const engineName = useRef<VoiceCallEngine>('on_device')
   const counted = useRef(false)
+  const transition = useRef(0)
   const bot = store.bots.get(botId)
   /** The call on the computer, which runs it. */
   const link = useRef<CallLink | null>(null)
@@ -129,7 +131,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
           ? new OpenAIRealtimeEngine(model, voice, call)
           : new GeminiLiveEngine(model, voice, call)
       cloudStartedAt.current = Date.now()
-      engineName.current = provider
+      engineName.current = provider === 'openai' && isLiveModel(model) ? 'openai_live' : provider
     } else {
       next = new OnDeviceEngine(send)
       void call.start('device').catch(() => {})
@@ -157,10 +159,19 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
     const provider = VoiceSettings.provider()
     if (closed.current || VoiceSettings.engineChoice(provider) === engineChoice.current) return
     countCloudMinutes()
-    engine.current?.end()
     setNotice(null)
     setBlocked(null)
-    begin(provider)
+    replaceEngine(provider)
+  }
+
+  const replaceEngine = (provider: VoiceProvider | null) => {
+    const request = ++transition.current
+    engineChoice.current = VoiceSettings.engineChoice(provider)
+    const retiring = engine.current
+    retiring?.end()
+    void (retiring?.awaitEnd() ?? Promise.resolve()).then(() => {
+      if (!closed.current && request === transition.current) begin(provider)
+    })
   }
 
   const rememberStatus = async () => {
@@ -203,7 +214,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
       countCloudMinutes()
       onSpeaking(false)
       interrupt.current = null
-      link.current?.end(Math.floor((Date.now() - startedAt) / 1000))
+      link.current?.end(Math.floor((Date.now() - startedAt) / 1000), engine.current?.awaitEnd())
       quality.current?.report()
     }
   }, [])
@@ -225,7 +236,7 @@ export function CallView({ botId, onSpeaking, interrupt, onEnd }: {
     if (phase === 'failed' && session.provider && onDeviceAvailable()) {
       countCloudMinutes()
       setNotice(fill(tr("{name} isn't available ({reason}). Using on-device voice."), { name: providerName(session.provider), reason: tr(String(session.failure)) }))
-      begin(null)
+      replaceEngine(null)
     }
   }, [session, phase])
 

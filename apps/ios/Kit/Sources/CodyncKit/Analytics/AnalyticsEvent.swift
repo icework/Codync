@@ -43,7 +43,7 @@ public enum AnalyticsEvent: Equatable, Sendable {
     public enum Link: String, Sendable {
         case github, issues, appStore = "app_store", demo, tailscale, privacy, installCommand = "install_command", installLink = "install_link"
     }
-    public enum VoiceEngine: String, Sendable { case onDevice = "on_device", openai, gemini, cloud }
+    public enum VoiceEngine: String, Sendable { case onDevice = "on_device", openai, openaiLive = "openai_live", gemini, cloud }
     public enum VoiceStuck: String, Sendable { case none, connecting, reconnecting, speaking }
     public enum VoiceFailure: String, Sendable { case none, microphone, connection, provider }
     public enum Screen: String, Sendable {

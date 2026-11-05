@@ -188,6 +188,7 @@ pub enum Screen {
 pub enum Engine {
     OnDevice,
     Openai,
+    OpenaiLive,
     Gemini,
     Cloud,
     #[serde(other)]
@@ -332,6 +333,10 @@ mod tests {
             (json!({"event": "link_opened", "app": "desktop", "link": "install_command"}), Event::LinkOpened),
             (json!({"event": "screen_viewed", "app": "tui", "screen": "bot_details"}), Event::ScreenViewed),
             (json!({"event": "voice_call_started", "app": "desktop", "engine": "on_device"}), Event::VoiceCallStarted),
+            (
+                json!({"event": "voice_call_started", "app": "desktop", "engine": "openai_live"}),
+                Event::VoiceCallStarted,
+            ),
             (
                 json!({"event": "voice_call_quality", "app": "desktop", "engine": "gemini", "ready_ms": 1200,
                     "reconnects": 1, "stuck": "none", "failure": "none"}),

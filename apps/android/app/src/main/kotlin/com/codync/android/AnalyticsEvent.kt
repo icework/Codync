@@ -177,7 +177,7 @@ internal enum class OutboundLink(override val wire: String) : CatalogValue {
 }
 
 internal enum class VoiceEngineKind(override val wire: String) : CatalogValue {
-    OnDevice("on_device"), OpenAI("openai"), Gemini("gemini"),
+    OnDevice("on_device"), OpenAI("openai"), OpenAILive("openai_live"), Gemini("gemini"),
     /** A provider's speech-to-text and text-to-speech (`CloudSpeechEngine`), not its realtime model. */
     Cloud("cloud"),
 }

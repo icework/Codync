@@ -29,7 +29,7 @@ export type SignInProvider = 'apple' | 'google' | 'github'
 export type SignInFailure = 'cancelled' | 'timeout' | 'verification' | 'error'
 
 /** What carried a voice call: on-device speech, a realtime model, or cloud transcription and speech. */
-export type VoiceCallEngine = 'on_device' | 'openai' | 'gemini' | 'cloud'
+export type VoiceCallEngine = 'on_device' | 'openai' | 'openai_live' | 'gemini' | 'cloud'
 /** The first phase of a call's engine that lasted too long. */
 export type VoiceStuck = 'none' | 'connecting' | 'reconnecting' | 'speaking'
 /** Why a call's engine gave up. */

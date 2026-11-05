@@ -26,6 +26,8 @@ struct CallView: View {
     @State private var settings = false
     /// `voice_call_started` went out for this call.
     @State private var reported = false
+    @State private var visible = false
+    @State private var transition = 0
     /// Each engine's `voice_call_quality`.
     @State private var quality = CallQuality()
     /// The bot's Live Activity showing the call.
@@ -52,6 +54,7 @@ struct CallView: View {
         .animation(Motion.reduced(Motion.fade, reduceMotion), value: session?.phase)
         .animation(Motion.reduced(Motion.fade, reduceMotion), value: notice)
         .onAppear {
+            visible = true
             startedAt = .now
             link = CallLink(model: model, botId: botId, call: call)
             if let bot {
@@ -62,9 +65,12 @@ struct CallView: View {
             begin(cloud: VoiceSettings.provider)
         }
         .onDisappear {
+            visible = false
+            transition += 1
             // First, so the connection outlives the engine: the end is sent after the engine's last lines.
-            link?.end(seconds: Int(Date.now.timeIntervalSince(startedAt)))
-            session?.end()
+            let ending = session
+            link?.end(seconds: Int(Date.now.timeIntervalSince(startedAt)), after: { await ending?.awaitEnd() })
+            ending?.end()
             countCloudMinutes()
             isSpeaking = false
             interrupt = nil
@@ -89,7 +95,7 @@ struct CallView: View {
             if case .failed(let message, _) = phase, let provider = session?.provider {
                 countCloudMinutes()
                 notice = "\(provider.name) isn't available (\(message)). Using on-device voice."
-                begin(cloud: nil)
+                replaceEngine(cloud: nil)
             }
         }
         .onChange(of: session?.muted) { _, muted in activity?.muted(muted == true) }
@@ -157,9 +163,21 @@ struct CallView: View {
         let provider = VoiceSettings.provider
         guard VoiceSettings.engineChoice(provider) != engineChoice else { return }
         countCloudMinutes()
-        session?.end()
         notice = nil
-        begin(cloud: provider)
+        replaceEngine(cloud: provider)
+    }
+
+    private func replaceEngine(cloud provider: VoiceProvider?) {
+        transition += 1
+        let request = transition
+        engineChoice = VoiceSettings.engineChoice(provider)
+        let retiring = session
+        retiring?.end()
+        Task {
+            await retiring?.awaitEnd()
+            guard visible, transition == request else { return }
+            begin(cloud: provider)
+        }
     }
 
     private func countCloudMinutes() {

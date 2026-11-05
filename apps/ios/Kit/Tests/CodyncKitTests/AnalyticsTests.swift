@@ -62,6 +62,7 @@ import Testing
     #expect(try json(.signInFailed(.google, reason: .cancelled)) == #"{"provider":"google","reason":"cancelled"}"#)
     #expect(try json(.screenViewed(.botDetails)) == #"{"screen":"bot_details"}"#)
     #expect(try json(.voiceCallStarted(.onDevice)) == #"{"engine":"on_device"}"#)
+    #expect(try json(.voiceCallStarted(.openaiLive)) == #"{"engine":"openai_live"}"#)
     #expect(try json(.voiceCallQuality(.gemini, readyMs: 1200, reconnects: 1, stuck: .none, failure: .connection))
         == #"{"engine":"gemini","failure":"connection","ready_ms":1200,"reconnects":1,"stuck":"none"}"#)
     // An engine that was never ready leaves `ready_ms` out.

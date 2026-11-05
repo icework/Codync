@@ -29,7 +29,7 @@ final class CallLink {
         self.call = call
     }
 
-    private func client() throws -> HostClient {
+    func client() throws -> HostClient {
         guard let client = model.client else { throw VoiceError("Not connected to \(model.hostName).") }
         return client
     }
@@ -101,9 +101,10 @@ final class CallLink {
     func progress(_ text: String) -> String { "\(Self.progressTag) \(text)" }
 
     /// The call is over: its line in the chat, with what's left of the transcript.
-    func end(seconds: Int) {
+    func end(seconds: Int, after finish: @escaping @MainActor () async -> Void = {}) {
         model.beginCallEnd()
         serial { [self] in
+            await finish()
             await model.endCall(botId, seconds: seconds, call: call, lines: drain(withOpen: true))
             model.finishCallEnd()
         }

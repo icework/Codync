@@ -43,10 +43,12 @@ protocol VoiceEngine: AnyObject, Observable {
     var muted: Bool { get set }
     /// Where the audio goes when it leaves the phone; nil on device.
     var provider: VoiceProvider? { get }
+    var analyticsName: AnalyticsEvent.VoiceEngine { get }
     /// Keeps the transport attached while audio is active, even without a visible UI update.
     var onActivityChanged: ((Bool) -> Void)? { get set }
     func start() async
     func end()
+    func awaitEnd() async
     /// Cuts what's being said short.
     func interrupt()
     /// A new final reply from the bot to say.
@@ -60,6 +62,7 @@ protocol VoiceEngine: AnyObject, Observable {
 }
 
 extension VoiceEngine {
+    func awaitEnd() async {}
     /// What the computer tells the call's voice, handed to the method that says it.
     func hear(_ cue: CallCue) {
         switch cue.kind {

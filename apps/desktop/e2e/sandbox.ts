@@ -12,13 +12,15 @@ const steerAgent = join(root, 'host/tests/fixtures/steer_agent.py')
 
 /** This worktree's sandbox: its name, host port and DevTools port (`npm run dev -- --cdp` opens port + 10000). */
 export function sandbox() {
-  const name = sandboxName(basename(root))
+  const name = sandboxName(process.env.CODYNC_SANDBOX_NAME ?? basename(root))
   const record = join(homedir(), SANDBOX_PREFIX + name, 'sandbox.json')
   let port: number
   try {
-    port = (JSON.parse(readFileSync(record, 'utf8')) as { port: number }).port
+    const saved = JSON.parse(readFileSync(record, 'utf8')) as { port: number; worktree: string }
+    if (resolve(saved.worktree) !== root) throw new Error('Sandbox belongs to another worktree')
+    port = saved.port
   } catch {
-    throw new Error(`No sandbox for ${root}: run \`npm run dev -- --cdp\` in apps/desktop first.`)
+    throw new Error(`No sandbox for ${root}: run \`npm run dev -- --name ${name} --cdp\` in apps/desktop first.`)
   }
   return { name, port, cdp: port + 10000 }
 }

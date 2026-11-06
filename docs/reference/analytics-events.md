@@ -183,3 +183,7 @@ rating. Neither StoreKit nor Google Play provides those outcomes. The [invitatio
 describes timing, exclusions, and cooldowns.
 
 Both phones also report `link_opened` with `link: issues` for their independent **Report an issue** action, and `link: app_store` for **Update Codync** (Android opens Google Play).
+
+### Smart routing
+
+The host reports `session_routed` when classification ends: `outcome` is `selected`, `missing_api_key`, `credential_unavailable`, `models_unavailable`, `client_error`, `network_error`, `api_rejected`, `invalid_response` or `timeout`; `profile` is an allowlisted profile or null; `fast` is the quota-clamped request; `duration_ms` measures classification time. No request text, provider body, key, bot ID or free-form error is sent. Existing `bot_updated.fields` includes `smartRouting` when toggled. Task success and adapter failures remain `turn_finished`.

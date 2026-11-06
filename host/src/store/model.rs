@@ -92,6 +92,9 @@ pub struct BotConfig {
     /// Ask the agent for its Fast mode (Claude Code, Codex): faster replies for more usage.
     #[serde(default)]
     pub fast_mode: bool,
+    /// Decisions API chooses a profile for each new Codex conversation.
+    #[serde(default)]
+    pub smart_routing: bool,
     /// Agents that carry on, in order, when the bot's own can't answer (see `agent::fallback`).
     #[serde(default)]
     pub fallbacks: Vec<Fallback>,

@@ -64,6 +64,7 @@
     "event:bot.bot.selfFallbacks": "bool",
     "event:bot.bot.sharedMemory": "bool",
     "event:bot.bot.skills": "array",
+    "event:bot.bot.smartRouting": "bool",
     "event:bot.bot.startedAt": "null",
     "event:bot.bot.status": "string",
     "event:bot.bot.unread": "number",

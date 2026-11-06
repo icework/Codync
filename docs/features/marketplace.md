@@ -158,3 +158,7 @@ immediately; setup failures remain visible for retry.
 ## Custom icons
 
 Agents show their bundled logo (a terminal symbol when none is bundled); only bots take custom images. See [custom icons](custom-icons.md) for the API, storage limits, cache behavior and deployment.
+
+## Smart routing
+
+Codex bots can opt into Decisions-based model, effort and quota-aware Fast selection for new conversations. See [smart routing](smart-routing.md) for credentials, supported profiles, session lifetime and failure behavior.

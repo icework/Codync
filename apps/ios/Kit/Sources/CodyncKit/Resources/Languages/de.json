@@ -1844,5 +1844,7 @@
   "Completions": "Vervollständigungen",
   "Choose and arrange": "Auswählen und anordnen",
   "Move {name}": "{name} verschieben",
-  "↑↓ select · J K arrange · space toggle · esc close": "↑↓ wählen · J K ordnen · space schalten · esc schließen"
+  "↑↓ select · J K arrange · space toggle · esc close": "↑↓ wählen · J K ordnen · space schalten · esc schließen",
+  "Smart routing": "Intelligentes Routing",
+  "Chooses model, effort and Fast for each new conversation using OpenAI Decisions (separately billed). Uses the OpenAI API key in call settings. Saved model settings are the fallback.": "OpenAI Decisions wählt Modell, Denkaufwand und Fast für neue Gespräche (separate Abrechnung). Verwendet den OpenAI-API-Schlüssel aus den Anrufeinstellungen. Gespeicherte Modelleinstellungen dienen als Ersatz."
 }

@@ -80,7 +80,8 @@ impl Actor {
                 // restarts into it, one that can't starts afresh.
                 let memory_changed = own_memory::kept(&cfg) != own_memory::kept(&self.cfg);
                 let resumes = self.conn.as_ref().is_none_or(|c| c.sessions.reopen.is_some());
-                let restart = cfg.backend != self.cfg.backend
+                let restart = cfg.smart_routing != self.cfg.smart_routing
+                    || cfg.backend != self.cfg.backend
                     || cfg.command != self.cfg.command
                     || cfg.cwd != self.cfg.cwd
                     || cfg.model != self.cfg.model

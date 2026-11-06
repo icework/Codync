@@ -6,6 +6,6 @@ export function updatePayload(bot: Bot): BotDraft {
     id: bot.id, name: bot.name, description: bot.description, avatarColor: bot.avatarColor, avatarShape: bot.avatarShape,
     backend: bot.backend, command: bot.command ?? null, cwd: bot.managedWorkspace ? '' : bot.cwd, permission: bot.permission,
     model: bot.model ?? null, pinned: bot.pinned, hidden: bot.hidden, notify: bot.notify ?? null,
-    connectors: bot.connectors, skills: bot.skills, computer: bot.computer, fastMode: bot.fastMode,
+    connectors: bot.connectors, skills: bot.skills, computer: bot.computer, fastMode: bot.fastMode, smartRouting: bot.smartRouting ?? undefined,
   }
 }

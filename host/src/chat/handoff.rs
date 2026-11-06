@@ -43,7 +43,7 @@ impl Reason {
     fn line(self) -> &'static str {
         match self {
             Self::Cold => {
-                "This conversation is long and has gone quiet, so your next message starts a fresh one carrying this summary."
+                "This conversation has gone quiet, so your next message starts a fresh one carrying this summary."
             }
             Self::Away => {
                 "You've been away a while and this conversation has been summarized several times, so your next message starts a fresh one carrying this summary."

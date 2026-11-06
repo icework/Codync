@@ -146,9 +146,11 @@ function BotSettingsForm({ draft, onChange, error, plugins, part = 'all' }: {
     <AgentModelPicker key="agent" backend={draft.backend} models={models} selection={draft.model}
       onChange={setModel} options={draft.modelOptions ?? {}} onOptionsChange={setModelOptions}
       agents={[...backends.map(agentChoice), { id: 'custom', label: 'Custom command', leading: <AgentIcon registry="custom" size={14} /> }]}
-      onAgentChange={(id) => onChange((d) => withBackend(d, id))} fast={draft.fastMode ?? false}
-      fastControl={((draft.backend !== 'custom' && models.catalog?.fastMode) || draft.fastMode || (saved?.backend === draft.backend && fastModeShown(saved))) ?
+      onAgentChange={(id) => onChange((d) => withBackend(d, id))} fast={!draft.smartRouting && (draft.fastMode ?? false)}
+      automatic={draft.smartRouting ?? false}
+      fastControl={!draft.smartRouting && ((draft.backend !== 'custom' && models.catalog?.fastMode) || draft.fastMode || (saved?.backend === draft.backend && fastModeShown(saved))) ?
         <SwitchRow title="Fast mode" detail={saved ? fastModeRefusal(saved) : null} on={draft.fastMode ?? false} onChange={(on) => set('fastMode', on)} /> : null}>
+      {draft.backend === 'codex' && (!saved || saved.smartRouting !== null) && <SwitchRow title="Smart routing" detail="Chooses model, effort and Fast for each new conversation using OpenAI Decisions (separately billed). Uses the OpenAI API key in call settings. Saved model settings are the fallback." on={draft.smartRouting ?? false} onChange={(on) => set('smartRouting', on)} />}
       {ownRest && <Text size="caption" tone="secondary">{restLine(ownRest, Date.now())}</Text>}
       {backend && !backend.available && <Text size="caption" tone="attention">{backend.installHint}</Text>}
       {draft.backend === 'custom' && <input className="field-box bot-command" value={draft.command ?? ''} placeholder="ACP command, e.g. my-agent --acp" spellCheck={false} onChange={(e) => set('command', e.target.value || null)} />}

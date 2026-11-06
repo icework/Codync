@@ -90,6 +90,7 @@ impl Store {
             "DELETE FROM kv WHERE k GLOB ?1 OR k GLOB ?2",
             [format!("context.{id}.*"), format!("context.epoch.{id}.*")],
         )?;
+        c.execute("DELETE FROM kv WHERE k GLOB ?1", [format!("routing.{id}.*")])?;
         // Its artifacts' details (`chat::artifacts`).
         c.execute("DELETE FROM kv WHERE k GLOB ?1", [format!("artifact.{id}.*")])?;
         Ok(rev)
@@ -179,6 +180,7 @@ mod tests {
             mode: None,
             model: None,
             model_options: std::collections::BTreeMap::new(),
+            smart_routing: false,
             fast_mode: false,
             fallbacks: vec![],
             self_fallbacks: true,

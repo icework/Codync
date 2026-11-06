@@ -28,6 +28,7 @@ mod lifecycle;
 mod modes;
 mod pi_tools;
 mod queue;
+mod routing;
 mod session;
 mod steer;
 mod tool_entry;

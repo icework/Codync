@@ -26,6 +26,7 @@ export interface Bot {
   /** The model's own settings (effort, fast…): agent option id → value. */
   modelOptions: Record<string, string>
   /** The agent's Fast mode (Claude Code, Codex): faster replies for more usage. */
+  smartRouting: boolean | null
   fastMode: boolean
   /** What the agent says about Fast mode: `unknown` (no session yet), `offered`, `unsupported`,
    *  or `refused` (it turned it off; `fastModeIssue` says why). */
@@ -101,6 +102,7 @@ export function normalizeBot(raw: Partial<Bot> & { id: string }): Bot {
     mode: raw.mode ?? null,
     model: raw.model ?? null,
     modelOptions: raw.modelOptions ?? {},
+    smartRouting: raw.smartRouting ?? null,
     fastMode: raw.fastMode ?? false,
     fastModeSupport: raw.fastModeSupport ?? 'unknown',
     fastModeIssue: raw.fastModeIssue ?? null,

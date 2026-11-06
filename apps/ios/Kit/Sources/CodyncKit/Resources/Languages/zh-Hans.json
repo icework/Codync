@@ -1844,5 +1844,7 @@
   "Completions": "补全",
   "Choose and arrange": "选择与排序",
   "Move {name}": "移动 {name}",
-  "↑↓ select · J K arrange · space toggle · esc close": "↑↓ 选择 · J K 排序 · space 切换 · esc 关闭"
+  "↑↓ select · J K arrange · space toggle · esc close": "↑↓ 选择 · J K 排序 · space 切换 · esc 关闭",
+  "Smart routing": "智能路由",
+  "Chooses model, effort and Fast for each new conversation using OpenAI Decisions (separately billed). Uses the OpenAI API key in call settings. Saved model settings are the fallback.": "每次新对话由 OpenAI Decisions 选择模型、推理强度和 Fast（另行计费）。使用通话设置中的 OpenAI API 密钥；路由不可用时使用已保存的模型设置。"
 }

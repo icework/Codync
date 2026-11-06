@@ -28,13 +28,14 @@ impl Actor {
             }
             return;
         }
+        let desired = self.routed_fast(sid);
         let Some(conn) = self.conn.as_mut() else { return };
         let option = fast_mode_config(options).cloned();
         let was_on = conn.fast_options.get(sid).is_some_and(fast_mode_on);
         let support = match &option {
             None => FastModeSupport::Unsupported,
             // Turned off right after it was on, or despite our asking: the agent refused it.
-            Some(o) if self.cfg.fast_mode && !fast_mode_on(o) && (listing == Listing::Switch || was_on) => {
+            Some(o) if desired && !fast_mode_on(o) && (listing == Listing::Switch || was_on) => {
                 FastModeSupport::Refused(fast_mode_refusal(o))
             }
             Some(_) => FastModeSupport::Offered,
@@ -48,21 +49,35 @@ impl Actor {
 
     /// Switches a live session's Fast mode to the bot's setting before a turn. Once the agent
     /// refused it, asks again only after the user changes the setting.
-    pub(super) async fn sync_fast_mode(&mut self, sid: &str) {
-        let on = self.cfg.fast_mode;
+    pub(super) async fn sync_fast_mode(&mut self, sid: &str) -> anyhow::Result<()> {
+        let on = self.routed_fast(sid);
         if on && matches!(self.fast_support, FastModeSupport::Refused(_)) {
-            return;
+            return Ok(());
         }
-        let Some(option) = self.conn.as_ref().and_then(|c| c.fast_options.get(sid)) else { return };
-        let (Some(config_id), Some(value)) = (option["id"].as_str(), fast_mode_change(option, on)) else { return };
+        let Some(option) = self.conn.as_ref().and_then(|c| c.fast_options.get(sid)) else { return Ok(()) };
+        let (Some(config_id), Some(value)) = (option["id"].as_str(), fast_mode_change(option, on)) else {
+            return Ok(());
+        };
         let params = json!({"sessionId": sid, "configId": config_id, "value": value});
         match self.session_request("session/set_config_option", params).await {
-            Ok(answer) => self.note_options(sid, &answer, Listing::Switch),
+            Ok(answer) => {
+                self.note_options(sid, &answer, Listing::Switch);
+                if crate::agent::routing::enabled(&self.cfg)
+                    && !on
+                    && self.conn.as_ref().and_then(|c| c.fast_options.get(sid)).is_none_or(fast_mode_on)
+                {
+                    anyhow::bail!("The agent did not confirm standard speed; no prompt was sent");
+                }
+            }
             Err(error) => {
                 tracing::warn!(bot = %self.cfg.id, error = format!("{error:#}"), "couldn't set Fast mode");
                 self.notice(&format!("Couldn't change Fast mode: {error:#}"), NoticeStyle::Info);
+                if crate::agent::routing::enabled(&self.cfg) {
+                    return Err(error);
+                }
             }
         }
+        Ok(())
     }
 
     /// The user changed the setting: a refusal no longer stands, so the next turn asks again.

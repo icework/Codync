@@ -13,7 +13,7 @@ type Choice = { id: string; label: string; leading?: ReactNode }
 
 /** One compact entry for the harness, model, model options and the bot's Fast mode. */
 export function AgentModelPicker({ backend, models, selection, onChange, options: chosen, onOptionsChange,
-  sessionNote = true, agents = [], onAgentChange, fastControl, fast = false, children }: {
+  sessionNote = true, agents = [], onAgentChange, fastControl, fast = false, automatic = false, children }: {
   backend: string
   models: AgentModelsState
   selection: string | null | undefined
@@ -25,6 +25,7 @@ export function AgentModelPicker({ backend, models, selection, onChange, options
   onAgentChange?: (id: string) => void
   fastControl?: ReactNode
   fast?: boolean
+  automatic?: boolean
   children?: ReactNode
 }) {
   const tr = useTr()
@@ -42,6 +43,8 @@ export function AgentModelPicker({ backend, models, selection, onChange, options
   const agent = agents.find((a) => a.id === backend)
   const modelName = value ? options.find((o) => o.id === value)?.label ?? value : tr('Default')
   const summary = modelOptions.map((o) => o.values.find((v) => v.id === (chosen[o.id] ?? o.default))?.name).filter(Boolean).join(' · ')
+  const summaryModel = automatic ? tr('Smart routing') : modelName
+  const summaryEffort = automatic ? '' : summary
   const browse = stage === 'agents' || stage === 'models'
   const choices = (stage === 'agents' ? agents : options).filter((o) => o.label.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
   const open = (next: Stage) => { setQuery(''); setStage(next) }
@@ -62,10 +65,10 @@ export function AgentModelPicker({ backend, models, selection, onChange, options
   }
   return (
     <VStack gap={8} className="agent-picker">
-      <button className="agent-picker-summary" title={[agent?.label ?? backend, modelName, summary, fast ? tr("Fast") : ""].filter(Boolean).join(" · ")} aria-expanded={stage !== 'closed'} onClick={() => open(stage === 'closed' ? 'models' : 'closed')}>
+      <button className="agent-picker-summary" title={[agent?.label ?? backend, summaryModel, summaryEffort, fast ? tr("Fast") : ""].filter(Boolean).join(" · ")} aria-expanded={stage !== 'closed'} onClick={() => open(stage === 'closed' ? 'models' : 'closed')}>
         <span className="agent-picker-identity">{agent?.leading}<Text key={backend} className="agent-picker-text-change">{agent?.label ?? backend}</Text></span>
-        <span className="agent-picker-model" title={modelName}><span key={modelName} className="agent-picker-text-change">{modelName}</span></span>
-        {summary && <span className="agent-picker-effort" title={summary}><span key={summary} className="agent-picker-text-change">{summary}</span></span>}
+        <span className="agent-picker-model" title={summaryModel}><span key={summaryModel} className="agent-picker-text-change">{summaryModel}</span></span>
+        {summaryEffort && <span className="agent-picker-effort" title={summaryEffort}><span key={summaryEffort} className="agent-picker-text-change">{summaryEffort}</span></span>}
         {fast && <Icon name="bolt" size={12} title={tr('Fast mode')} />}
         <Icon name={stage === 'closed' ? 'chevron.down' : 'chevron.up'} size={10} />
       </button>

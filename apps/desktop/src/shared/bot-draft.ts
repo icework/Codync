@@ -14,6 +14,7 @@ export interface BotDraft {
   mode?: string | null
   model?: string | null
   modelOptions?: Record<string, string>
+  smartRouting?: boolean
   fastMode?: boolean
   fallbacks?: Fallback[]
   selfFallbacks?: boolean
@@ -46,6 +47,7 @@ export function draftOf(bot: Bot): BotDraft {
     mode: bot.mode,
     model: bot.model ?? null,
     modelOptions: bot.modelOptions,
+    smartRouting: bot.smartRouting ?? undefined,
     fastMode: bot.fastMode,
     fallbacks: bot.fallbacks,
     selfFallbacks: bot.selfFallbacks ?? undefined,

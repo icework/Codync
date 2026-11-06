@@ -128,7 +128,7 @@ fn load(store: &Store) -> Result<Keys> {
         .unwrap_or_default())
 }
 
-fn key(store: &Store, p: Provider) -> Result<String> {
+pub(crate) fn key(store: &Store, p: Provider) -> Result<String> {
     let keys = load(store)?;
     let key = keys.get(p);
     if key.is_empty() {

@@ -370,6 +370,7 @@ pub(super) mod tests {
             mode: None,
             model: Some("opus".into()),
             model_options: std::collections::BTreeMap::new(),
+            smart_routing: false,
             fast_mode: false,
             fallbacks: vec![],
             self_fallbacks: true,

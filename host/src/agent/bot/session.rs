@@ -1,7 +1,7 @@
 //! The bot's ACP sessions: starting its agent, new/reopen, routine runs' sessions.
 
 use super::fast_mode::Listing;
-use super::launch::{claude_meta, launch_commands, select_model, start_agent, system_prompt};
+use super::launch::{claude_meta, launch_commands, start_agent, system_prompt};
 use super::{Actor, Adapter, Conn, Instructions, codex_names, pi_tools};
 use crate::agent::acp::{self, Incoming};
 use crate::agent::own_memory;
@@ -144,9 +144,9 @@ impl Actor {
 
     /// `ensure_session` for the turn: a routine run's setup must end by its time limit, and setup cut short
     /// mustn't leave the agent opening a session the host never learns of.
-    pub(super) async fn ensure_turn_session(&mut self, slot: Option<&str>) -> Result<()> {
-        let Some(deadline) = self.routine_deadline else { return self.ensure_session(slot).await };
-        let setup = tokio::time::timeout_at(deadline.into(), self.ensure_session(slot)).await;
+    pub(super) async fn ensure_turn_session(&mut self, slot: Option<&str>, prompt: &str) -> Result<()> {
+        let Some(deadline) = self.routine_deadline else { return self.ensure_session(slot, prompt).await };
+        let setup = tokio::time::timeout_at(deadline.into(), self.ensure_session(slot, prompt)).await;
         if setup.is_err() {
             self.drop_unanswered().await;
         }
@@ -155,7 +155,7 @@ impl Actor {
 
     /// Makes sure the agent runs and `slot`'s session (main, or a routine run's) is live;
     /// sets `turn_session`.
-    async fn ensure_session(&mut self, slot: Option<&str>) -> Result<()> {
+    async fn ensure_session(&mut self, slot: Option<&str>, prompt: &str) -> Result<()> {
         if !self.cfg.connectors.is_empty()
             || self.hub.store.kv_read(&format!("agent-env:{}", self.cfg.backend))?.is_some()
         {
@@ -219,6 +219,22 @@ impl Actor {
         // re-rendered them, loading the session again swaps the prompt in (the adapter
         // rebuilds its query and resumes the same conversation).
         let current = self.session_for(slot);
+        let retained_route = current
+            .as_deref()
+            .map(|sid| crate::agent::routing::saved(&self.hub.store, &self.cfg, sid))
+            .transpose()?
+            .flatten();
+        // A pre-feature session (or a config saved just before a crash) needs one decision
+        // before it can run. Reopen it so the adapter supplies the current config catalog.
+        if crate::agent::routing::enabled(&self.cfg)
+            && retained_route.is_none()
+            && current.as_ref().is_some_and(|sid| self.conn.as_ref().is_some_and(|c| c.loaded.contains_key(sid)))
+        {
+            if let Some(conn) = self.conn.take() {
+                conn.acp.kill().await;
+            }
+            return Box::pin(self.ensure_session(slot, prompt)).await;
+        }
         let snapshot = match (&current, instructions) {
             (Some(sid), Instructions::ClaudeMeta) => Some(self.snapshot(sid).await?),
             _ => None,
@@ -234,7 +250,7 @@ impl Actor {
             let Some(reopen) = conn.sessions.reopen else {
                 tracing::info!(bot = %self.cfg.id, "the agent can't resume sessions; starting a fresh one");
                 self.set_session(slot, None);
-                return Box::pin(self.ensure_session(slot)).await;
+                return Box::pin(self.ensure_session(slot, prompt)).await;
             };
             self.hub.set_runtime(&self.cfg.id, |r| r.activity = "Resuming session…".into());
             let mut params = self.session_params(&servers, Some(&sid));
@@ -256,8 +272,14 @@ impl Actor {
                 Ok(res) => {
                     // A resumed session can come back on the agent's last-used model (Cursor
                     // keeps one for all its sessions), so the bot's own is set again.
-                    let res = if res.get("configOptions").is_some() || res.get("models").is_some() {
-                        match select_model(&conn.acp, &res, &sid, &self.cfg).await {
+                    let migrated = crate::agent::routing::enabled(&self.cfg) && retained_route.is_none();
+                    let route = if migrated {
+                        Some(crate::agent::routing::choose(&self.hub, &self.cfg, prompt, &res).await)
+                    } else {
+                        retained_route.clone()
+                    };
+                    let res = if route.is_some() || res.get("configOptions").is_some() || res.get("models").is_some() {
+                        match self.select_routed_model(&res, &sid, route.as_ref()).await {
                             Ok(selected) => selected,
                             Err(error) => {
                                 // The agent now holds a session the host doesn't track, and `session/resume` refuses
@@ -273,9 +295,20 @@ impl Actor {
                     } else {
                         res
                     };
+                    if migrated && let Some(route) = &route {
+                        self.hub
+                            .store
+                            .kv_set(&crate::agent::routing::key(&self.cfg.id, &sid), &serde_json::to_string(route)?)?;
+                        self.fast_mode_changed();
+                    }
+                    let Some(conn) = self.conn.as_mut() else { bail!("agent not running") };
                     conn.loaded.insert(sid.clone(), Instant::now());
                     conn.renamed.insert(sid.clone(), renamed);
                     self.note_options(&sid, &res, Listing::Session);
+                    if migrated {
+                        self.sync_fast_mode(&sid).await?;
+                        self.announce_route(&sid, true)?;
+                    }
                     if let Some(s) = snapshot {
                         // Its system prompt now names the bot and holds memory as rendered.
                         context::mark_announced(&self.hub.store, &self.cfg.id, &s, s.system_identity.clone())?;
@@ -304,11 +337,26 @@ impl Actor {
             Instructions::FirstMessage => {}
         }
         let res = self.session_request("session/new", params).await?;
-        let Some(conn) = self.conn.as_mut() else { bail!("agent not running") };
         let sid = res["sessionId"].as_str().ok_or_else(|| anyhow!("agent returned no sessionId"))?.to_owned();
+        // Recovery of an existing logical session keeps its route; only a new conversation calls Decisions.
+        let route = if crate::agent::routing::enabled(&self.cfg) {
+            if let Some(route) = retained_route {
+                Some(route)
+            } else {
+                self.hub.set_runtime(&self.cfg.id, |r| r.activity = "Choosing model and effort…".into());
+                Some(crate::agent::routing::choose(&self.hub, &self.cfg, prompt, &res).await)
+            }
+        } else {
+            None
+        };
+        let options = self.select_routed_model(&res, &sid, route.as_ref()).await?;
+        if let Some(route) = route {
+            self.hub.store.kv_set(&crate::agent::routing::key(&self.cfg.id, &sid), &serde_json::to_string(&route)?)?;
+            self.fast_mode_changed();
+        }
+        let Some(conn) = self.conn.as_mut() else { bail!("agent not running") };
         conn.loaded.insert(sid.clone(), Instant::now());
         conn.renamed.insert(sid.clone(), renamed);
-        let options = select_model(&conn.acp, &res, &sid, &self.cfg).await?;
         self.note_options(&sid, &options, Listing::Session);
         self.set_session(slot, Some(&sid));
         self.session_fresh = true;

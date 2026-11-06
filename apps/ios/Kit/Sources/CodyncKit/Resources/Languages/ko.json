@@ -1844,5 +1844,7 @@
   "Completions": "자동 완성",
   "Choose and arrange": "선택 및 정렬",
   "Move {name}": "{name} 이동",
-  "↑↓ select · J K arrange · space toggle · esc close": "↑↓ 선택 · J K 정렬 · space 전환 · esc 닫기"
+  "↑↓ select · J K arrange · space toggle · esc close": "↑↓ 선택 · J K 정렬 · space 전환 · esc 닫기",
+  "Smart routing": "스마트 라우팅",
+  "Chooses model, effort and Fast for each new conversation using OpenAI Decisions (separately billed). Uses the OpenAI API key in call settings. Saved model settings are the fallback.": "새 대화마다 OpenAI Decisions가 모델, 추론 강도, Fast를 선택합니다(별도 요금). 통화 설정의 OpenAI API 키를 사용하며, 사용할 수 없으면 저장된 모델 설정을 사용합니다."
 }

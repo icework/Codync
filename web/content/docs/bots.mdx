@@ -20,6 +20,14 @@ You set it up and arrange it like any bot: name, avatar, agent, folder, connecto
 
 The host on your computer runs every bot. A bot's agent starts when you send it a message and keeps its session loaded between messages. After a while without use the agent stops; your next message starts it again and picks up the same session. Your apps only show the bot and send it your messages, so the bot keeps working when you close the app or put your phone away.
 
+## Smart routing with Codex
+
+On the desktop, choose **Codex** in a bot's settings, then turn on **Smart routing**. This first version is configured on desktop; your phone can keep chatting with the same bot. For each new conversation, Codync uses OpenAI Decisions to choose the model and reasoning effort, and uses Fast when enough subscription quota remains. The first chat notice shows the selection. Follow-ups and session recovery keep it; in the main chat, returning after 30 minutes starts a new conversation with a handoff and a fresh selection.
+
+Add an OpenAI platform API key in the computer's call settings first. Decisions is billed separately; your Codex ChatGPT login does not cover it. Routing sends the initiating request and a bounded part of the bot's standing instructions to OpenAI. It does not send your full chat history or project files.
+
+Fast requires recent quota readings with at least half remaining in every reported window. Unknown quota uses standard speed. Your manual model settings remain saved as the fallback: if routing is unavailable, Codync tells you and uses those settings at standard speed. Turning routing off returns to manual selection.
+
 ## Where to change a bot's settings
 
 - **iPhone:** open the bot's chat and tap its name at the top. The tabs are **Details**, **Library**, **Memory** and **Settings**. **Details** shows its [dev servers](/docs/dev-servers), instructions, agent, model and routines; **Settings** shows the rest, including the Codync skills and connectors it passes on. Changes save as you edit. You can also touch and hold the bot in the list and choose **Edit profile**.

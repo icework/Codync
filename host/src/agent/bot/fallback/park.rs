@@ -110,7 +110,8 @@ impl Actor {
             let agent = fallback::backend(old, step);
             let same = fallback::step_of(&self.base, agent).is_some_and(|s| {
                 let (a, b) = (fallback::effective(old, step), fallback::effective(&self.base, s));
-                (a.command, a.model, a.model_options) == (b.command, b.model, b.model_options)
+                (a.command, a.model, a.model_options, a.smart_routing)
+                    == (b.command, b.model, b.model_options, b.smart_routing)
             });
             if !same && agent != self.cfg.backend {
                 let forgot = self.hub.store.kv_delete(&parked_key(&self.base.id, agent));

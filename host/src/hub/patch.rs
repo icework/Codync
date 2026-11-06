@@ -32,6 +32,9 @@ pub(super) fn patched(stored: &BotConfig, patch: &Value) -> Result<BotConfig> {
     {
         cfg.mode = Some(crate::agent::modes::AUTO.into());
     }
+    if cfg.backend != "codex" {
+        cfg.smart_routing = false;
+    }
     if cfg.kind != stored.kind {
         bail!("a bot can't become a group, or a group a bot");
     }

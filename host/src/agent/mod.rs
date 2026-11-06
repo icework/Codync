@@ -13,6 +13,7 @@ pub mod new_bot;
 pub mod node;
 pub mod own_memory;
 pub mod registry;
+pub mod routing;
 pub mod term;
 pub mod workspace;
 

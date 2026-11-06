@@ -168,7 +168,7 @@ impl Actor {
         let (hub, cfg) = (self.hub.clone(), self.cfg.clone());
         let _ = tokio::task::spawn_blocking(move || memory::files::scan(&hub, &cfg)).await;
         let slot = self.slot();
-        self.ensure_turn_session(slot.as_deref()).await?;
+        self.ensure_turn_session(slot.as_deref(), text).await?;
         if !hidden {
             self.carry_in();
         }
@@ -176,7 +176,8 @@ impl Actor {
         self.hub.set_runtime(&self.id(), |r| r.session.clone_from(&session));
         if let Some(sid) = session {
             self.sync_mode(&sid).await?;
-            self.sync_fast_mode(&sid).await;
+            self.sync_fast_mode(&sid).await?;
+            self.announce_route(&sid, false)?;
         }
         if hidden && self.session_fresh {
             // A new session must never silently repeat an interrupted routine, and has nothing to compact.

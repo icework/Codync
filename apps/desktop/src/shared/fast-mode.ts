@@ -9,12 +9,12 @@ export type FastModeState = 'on' | 'off' | 'refused'
  * settles it), or one that has it on (so it can be turned off).
  */
 export function fastModeShown(bot: Bot | null): boolean {
-  if (!bot || bot.kind === 'group') return false
+  if (!bot || bot.kind === 'group' || bot.smartRouting) return false
   return bot.fastMode || bot.fastModeSupport !== 'unsupported'
 }
 
 export function fastModeState(bot: Bot): FastModeState {
-  if (!bot.fastMode) return 'off'
+  if (!bot.fastMode || bot.smartRouting) return 'off'
   return bot.fastModeSupport === 'refused' ? 'refused' : 'on'
 }
 

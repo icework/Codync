@@ -1844,5 +1844,7 @@
   "Completions": "Complétions",
   "Choose and arrange": "Choisir et organiser",
   "Move {name}": "Déplacer {name}",
-  "↑↓ select · J K arrange · space toggle · esc close": "↑↓ choisir · J K organiser · space basculer · esc fermer"
+  "↑↓ select · J K arrange · space toggle · esc close": "↑↓ choisir · J K organiser · space basculer · esc fermer",
+  "Smart routing": "Routage intelligent",
+  "Chooses model, effort and Fast for each new conversation using OpenAI Decisions (separately billed). Uses the OpenAI API key in call settings. Saved model settings are the fallback.": "OpenAI Decisions choisit le modèle, l’effort et Fast pour chaque nouvelle conversation (facturation séparée). Utilise la clé API OpenAI des réglages d’appel. Les réglages enregistrés servent de solution de repli."
 }

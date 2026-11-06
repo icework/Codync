@@ -38,6 +38,7 @@ pub fn backend(cfg: &BotConfig, step: usize) -> &str {
 pub fn effective(cfg: &BotConfig, step: usize) -> BotConfig {
     let mut out = cfg.clone();
     if let Some(f) = fallback_at(cfg, step) {
+        out.smart_routing = false;
         out.backend.clone_from(&f.backend);
         out.command.clone_from(&f.command);
         out.model.clone_from(&f.model);

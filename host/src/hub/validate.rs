@@ -7,6 +7,9 @@ pub(crate) fn validate(cfg: &BotConfig) -> Result<()> {
     if cfg.name.trim().is_empty() {
         bail!("name is required");
     }
+    if cfg.smart_routing && (cfg.backend != "codex" || cfg.is_group()) {
+        bail!("Smart routing is available only for Codex bots");
+    }
     if cfg.is_group() {
         return Ok(());
     }

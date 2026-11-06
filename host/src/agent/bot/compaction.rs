@@ -254,7 +254,9 @@ impl Actor {
         {
             let c = self.settle_kept(&sid);
             let life = self.cache_life();
-            if rules::rollover_due(&c, life, now_ms()) {
+            if rules::rollover_due(&c, life, now_ms())
+                || crate::agent::routing::idle_boundary(&self.cfg, c.last_turn, now_ms())
+            {
                 let reason =
                     if now_ms() - c.last_turn >= life.ms() { handoff::Reason::Cold } else { handoff::Reason::Away };
                 self.draft_handoff(&sid, reason);

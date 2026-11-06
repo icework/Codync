@@ -72,6 +72,8 @@ pub enum Event {
     TurnFinished,
     /// A turn moved on to the bot's next agent (`agent::fallback`).
     AgentFellBack,
+    /// A new conversation requested a Decisions API route, and its outcome.
+    SessionRouted,
     UsageReadFailed,
     SessionReset,
     PermissionAnswered,
@@ -155,6 +157,7 @@ impl Event {
             Self::QueuedMessageRemoved => "queued_message_removed",
             Self::TurnStopped => "turn_stopped",
             Self::TurnFinished => "turn_finished",
+            Self::SessionRouted => "session_routed",
             Self::AgentFellBack => "agent_fell_back",
             Self::UsageReadFailed => "usage_read_failed",
             Self::SessionReset => "session_reset",

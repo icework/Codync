@@ -12,7 +12,9 @@ const browser = new BrowserAuthentication((url) => shell.openExternal(url))
 export { AuthenticationEnded } from './browser-authentication'
 
 export function registerSchemes() {
-  for (const scheme of SCHEMES) {
+  // macOS needs a packaged bundle's URL declarations. Registering generic Electron
+  // steals installed Dev's callbacks without telling Launch Services which worktree to run.
+  for (const scheme of process.platform === 'darwin' && !app.isPackaged ? [] : SCHEMES) {
     if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient(scheme, process.execPath, [process.argv[1]])
     else app.setAsDefaultProtocolClient(scheme)
   }

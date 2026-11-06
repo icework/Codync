@@ -15,7 +15,8 @@ const handleURL = (url: string) => browser.handleURL(url)
 const { AccountService } = loadMainModule<typeof import('../main/account.ts')>('account', {
   'node:events': { EventEmitter }, 'node:fs': { promises: {} }, 'node:path': path,
   electron: { app: { getVersion: () => '2.33.1' }, ipcMain: {}, safeStorage: {} },
-  './auth': { authenticate: browser.authenticate.bind(browser), AuthenticationEnded },
+  './auth': { authenticate: browser.authenticate.bind(browser), AuthenticationEnded, handleURL },
+  './account-return': { loopbackAccountReturn: () => { throw new Error('Packaged/Windows flows must keep custom schemes') } },
   './cloud': {
     revokeThisDevice: async (_base: string, token: string, userId: string) => { revoked.push(`${userId} ${token}`) },
     dropDeviceKey: async (userId: string) => { dropped.push(userId) },

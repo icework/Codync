@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { app, ipcMain, safeStorage, type BrowserWindow } from 'electron'
 import type { SignInFailure, SignInProvider } from '../shared/analytics'
 import type { AccountState } from '../shared/ipc'
-import { authenticate, AuthenticationEnded } from './auth'
+import { authenticate, AuthenticationEnded, handleURL } from './auth'
+import { loopbackAccountReturn } from './account-return'
 import { dropDeviceKey, revokeThisDevice } from './cloud'
 import { buildConfig, identity } from './environment'
 
@@ -225,7 +226,7 @@ export class AccountService extends EventEmitter {
   }
 
   /** Only a callback verified against this sign-in may finish its browser wait. */
-  private async browserSignIn(id: string, redirect: string, attempt: number) {
+  private async browserSignIn(id: string, redirect: string, attempt: number, returnScheme: string) {
     let verified: SignInResource | null = null
     const accept = async (url: string, isCurrent: () => boolean) => {
       if (attempt !== this.signInAttempt) return false
@@ -249,7 +250,7 @@ export class AccountService extends EventEmitter {
       }
     }
     // Closing the browser does not leave the app loading; another sign-in can replace it.
-    const authentication = authenticate(redirect, SCHEME, accept)
+    const authentication = authenticate(redirect, returnScheme, accept)
     this.set({ busy: false })
     const callback = new URL(await authentication)
     if (attempt !== this.signInAttempt || !verified) return null
@@ -266,14 +267,17 @@ export class AccountService extends EventEmitter {
     const attempt = ++this.signInAttempt
     const name = PROVIDER_NAMES[provider]
     let failure: SignInFailure | null = null
+    let localReturn: Awaited<ReturnType<typeof loopbackAccountReturn>> | null = null
     this.set({ busy: true, error: null })
     try {
+      if (!app.isPackaged && process.platform === 'darwin') localReturn = await loopbackAccountReturn(handleURL)
+      const redirectURL = localReturn?.url ?? REDIRECT
       const strategy = `oauth_${provider}`
-      const created = await this.request<SignInResource>('POST', '/v1/client/sign_ins', { strategy, redirect_url: REDIRECT })
-      const prepared = await this.request<SignInResource>('POST', `/v1/client/sign_ins/${created.id}/prepare_first_factor`, { strategy, redirect_url: REDIRECT })
+      const created = await this.request<SignInResource>('POST', '/v1/client/sign_ins', { strategy, redirect_url: redirectURL })
+      const prepared = await this.request<SignInResource>('POST', `/v1/client/sign_ins/${created.id}/prepare_first_factor`, { strategy, redirect_url: redirectURL })
       const redirect = prepared.first_factor_verification?.external_verification_redirect_url
       if (!redirect) throw new ClerkError(0, 'Redirect URL is missing. Unable to start the sign-in.')
-      const authenticated = await this.browserSignIn(created.id, redirect, attempt)
+      const authenticated = await this.browserSignIn(created.id, redirect, attempt, localReturn?.scheme ?? SCHEME)
       if (!authenticated) return 'cancelled'
       const { callback, signIn } = authenticated
       const nonce = callback.searchParams.get('rotating_token_nonce')
@@ -300,6 +304,7 @@ export class AccountService extends EventEmitter {
         this.set({ error: "Couldn't sign in. Check your connection and try again." })
       }
     } finally {
+      localReturn?.close()
       if (attempt === this.signInAttempt) this.set({ busy: false })
     }
     return failure

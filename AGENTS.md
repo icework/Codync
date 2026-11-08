@@ -6,6 +6,8 @@
 - Fetch `origin` and `fork`; integrate upstream `origin/dev` by merge in a candidate worktree. Push personal work only to `fork` (`icework/Codync`), never `origin`; no rebase/autostash of personal history or force push. Upstream contribution/release instructions below are not authorization to publish personal changes upstream.
 - The latest available upstream production iOS/mobile release is the moving compatibility baseline (Kai keeps it updated) and must keep working with both personal Macs. Preserve existing protocol/authentication/pairing and flows; new client-only features stay optional. Automated compatibility checks remain required; Kai authorizes direct merge/deployment after required checks and backups, then personally tests the new app. Record real-audio/mobile/UI checks as pending_user_acceptance instead of blocking only for missing manual testing; roll back safely on failure. Follow [personal workflow and mobile gate](docs/guides/personal-build.md#personal-feature-workflow).
 
+Personal testing/review uses [efficient personal testing](docs/guides/personal-testing.md): one `gpt-6.1-terra` test subagent with a fresh context, focused checks by default, full weekly coverage and compact log summaries. This overrides the generic expansion defaults below.
+
 ## Project Structure & Module Organization
 
 - `host/`: Rust daemon, ACP integration, SQLite storage, HTTP/SSE API, and terminal UI; unit tests live alongside modules in `src/`.
@@ -30,11 +32,9 @@ Always stop the old desktop app, host and iPhone process for the variant being r
 
 Keep only the latest build: in this checkout, Apple builds go to `build/dd` only (no other `-derivedDataPath`, no copies in scratchpads, `/tmp` or Xcode's DerivedData); delete any older Codync build right away, so macOS never launches a stale copy. A git worktree may keep its own single build inside that worktree.
 
-## End-to-end test every change
+## End-to-end validation
 
-After every change, test it end to end on the real apps, not just builds and unit tests: install the new build (old one stopped first) and walk through the changed flow. Drive the desktop app with Playwright (`npm run e2e` against the sandbox) and the iPhone app (iOS Simulator) and Android app (the one shared emulator, never a second: [test devices](docs/guides/dev-app.md#worktree-sandboxes)) with one Maestro run (`apps/maestro`); Computer Use (cua-driver, in the background) only for the native steps they can't reach: [test stack](docs/guides/test-stack.md). Report any check that could not run and why.
-- **Minimal e2e** (default): only the platform of the computer you test on (on the Mac: macOS).
-- **Full e2e** (large changes: platform code, packaging, the desktop main process; or when asked): macOS, Linux (Lima `codync-linux`) and Windows (UTM, [Windows testing](docs/guides/windows-testing.md)). A platform whose VM isn't installed is skipped and reported, not set up.
+Personal work follows [efficient personal testing](docs/guides/personal-testing.md). Upstream work follows [test stack](docs/guides/test-stack.md): exercise affected flows on real sandbox apps, record missing checks, and use only existing platform test environments. Build/install and device details: [development](docs/guides/development.md), [worktree sandboxes](docs/guides/dev-app.md#worktree-sandboxes).
 
 ## Versioning & releases
 

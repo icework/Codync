@@ -168,10 +168,10 @@ changes. Official builds keep the existing update path. Preserve production
 login/Keychain state; if macOS requires approval after signing identity changes,
 ask the user to handle that prompt, never reset accounts or Keychain items.
 
-Use the validation tiers below for upstream maintenance. Follow after-change for
-our own source changes. Run selected desktop Playwright tests in an isolated Dev
-sandbox (the full suite for weekly/expanded validation); the sandbox name must be
-explicit and identical:
+Use [efficient personal testing](personal-testing.md) for maintenance and our own
+changes; it is the source of truth for test scope, Terra delegation and reuse.
+Run selected Playwright specs in an isolated Dev sandbox (whole suite for weekly
+or justified broad desktop impact); the sandbox name must be explicit and identical:
 
 ```sh
 CODYNC_CLERK_PUBLISHABLE_KEY='' CODYNC_CLOUD_URL='' CODYNC_HOST_BIN='<dev host>' npm run dev -- --name personal-check --cdp
@@ -188,67 +188,35 @@ Stop only this run's sandbox before packaging; never prune other sandboxes.
 
 ## Validation tiers
 
-Kai requested daily lightweight checks and weekly full regression on 2026-11-04.
-This policy applies to personal deployment maintenance, not upstream release CI.
+[Efficient personal testing](personal-testing.md) defines the single test-selection,
+`gpt-6.1-terra` runner, reuse and compact-output policy (Kai, 2026-11-08).
 
-### Daily: focused validation before deployment
+- **Daily, 04:00 America/Los_Angeles:** fetch and inspect receipts/conflicts/weekly
+  blockers first. No shipped-code change means current health/cloud and read-only
+  routed MCP only: no candidate, build, suites, restart or reinstall. Docs-only
+  integration records reviewedCommit separately from installedCommit.
+- **Code update:** focused checks plus sandbox smoke/changed flows. Escalate high
+  risks to affected-package/contract validation before deployment; entire-repo
+  regression needs a concrete broad impact or unexplained failure, not a keyword.
+  Reuse valid results and the same accepted artifact when only Mini is behind.
+- **Weekly, Sunday 05:00 America/Los_Angeles:** complete desktop/Host regression
+  checklist against actual installed source, without another upstream update or
+  production restart. Reuse matching checks at most seven days old with original
+  provenance; run missing/expired checks. Also check current two-machine health,
+  owner/identity/hashes, update guards, MCP, SQLite integrity and latest backup
+  readability/restore evidence; supplement pending read-only UI checks.
+- Both tasks share the PID lock below. A known weekly regression blocks rollout;
+  missing UI tooling is pending, never a product failure or a passed check. Retry
+  unavailable UI once (about 60 seconds total); unperformed manual UI/audio/phone
+  checks remain pending_user_acceptance. Record validationTier=daily (scope focused
+  or expanded) or weekly, exact tested/installed commits, reusedFrom/executedAt,
+  individual results, elapsed times and pending items. Never renew cached evidence
+  timestamps or claim a different source revision was tested.
 
-- Fetch and compare refs/receipts first. With no new shipped code and matching
-  installed hashes, do not create a build worktree, rebuild, reinstall or restart.
-  Check both hosts' health/cloud status and read-only MCP connectivity, then exit.
-  Documentation-only merges can advance the branch without an app rebuild; record
-  `reviewedCommit`/`reviewedUpstreamCommit` separately from the actual installed
-  source commit. Compare relevant source, dependency and build-config diffs.
-- For ordinary updates, review the entire incoming diff, select tests for affected
-  modules, typecheck changed desktop code, and run a small isolated app smoke test
-  (launch, bot list/history, and the changed flow). Run focused Rust tests and fmt
-  when host code changes. Reuse valid dependency caches; run npm ci when needed
-  by lockfile/toolchain/cache changes, not unconditionally. Do not run full unit
-  suites or all-target clippy on every ordinary update.
-- Preserve the deployment gates below: idle checks, local backups, signing and
-  updater guards, each machine's identity/account/data integrity, and host-routed
-  MCP calls. Accept the MacBook before deploying the exact same artifact to Mini.
-- Routine daily production acceptance uses installed hashes, process/health,
-  cloud owner/registration, original data and MCP evidence. Full production UI
-  walkthroughs belong to weekly validation. Record `validationTier: daily` and
-  `accountUI: deferred_to_weekly`; never label an unobserved UI as passed.
-  A previous UI-tool-only timeout is retained as pending for the weekly check,
-  not a reason to reinstall. Actual login failures or product failures block
-  rollout. Only retry an unavailable UI tool once (roughly 60 seconds total).
-- Expand to the full checks **before deployment**, even on a weekday, for changes
-  to database schemas/migrations, account/authentication/Keychain/identity,
-  cloud/MCP transport or compatibility, updater guards, signing/packaging,
-  dependency/toolchain security, broad desktop-main/process lifecycle behavior,
-  or when the focused checks fail or leave a concrete unresolved concern. Also
-  inspect affected real production UI when available; manual UI/audio/mobile checks
-  may follow deployment under Kai's explicit user-acceptance policy above. A tool
-  outage is pending_user_acceptance, never a passed check. Automated failures and
-  known product/data regressions still block rollout.
-
-### Weekly: full regression, without routine production reinstall
-
-Automation `codync` runs Sundays at 05:00 America/Los_Angeles using the same
-single-run lock as daily (`codync-personal`).
-If the daily run still owns the lock, defer; never overlap or steal a live lock.
-Test the currently deployed personal source in an isolated worktree/sandbox;
-record exact tested commit, toolchain and artifact hashes. If machines differ,
-report that discrepancy and leave deployment recovery to the daily flow.
-
-Run desktop typecheck and the entire unit/Playwright suites, host fmt, all-target
-clippy and full cargo tests. Walk through both real production apps read-only
-(original account, bot list, existing history, settings), verify both routed MCP
-calls, database integrity, and backup archive readability. Test restore using a
-private temporary database copy, never over live production data. Build/test the
-current source as needed in the sandbox; do not stop, rebuild or reinstall the
-production apps just to run regression. Other platforms use existing test
-environments only when affected/applicable; report unavailable coverage honestly.
-
-Write `weekly-verification.json` in the private support directory, with tested
-commit, checks, timestamps, pending UI checks and status `passed`, `failed`, or
-`pending`. A real regression blocks subsequent deployment until resolved; a tool
-outage is not a product failure and does not erase earlier pending checks. Never
-reuse weekly results for a different source revision. Keep reports concise and
-record individual step durations to measure whether the daily path is faster.
+The production safety gates below always apply. No test optimization removes
+idle/active-call checks, per-machine fresh complete backups, signing/personal
+updater guards, original data/identity/pairing checks, released-mobile compatibility,
+or MacBook-first then Mini deployment. Real product/data failures stop promotion.
 
 ## Daily pipeline: MacBook first, then Mac mini
 

@@ -6,6 +6,8 @@ Bot-based remote for coding agents: persistent named bots on your computer, mess
 
 Follow [AGENTS.md personal branch rules](AGENTS.md#personal-branch-rules-override-upstream-workflow-below): every personal task branches from `codex/personal` in a separate worktree, merges back to personal and pushes only to `fork`. Never rebase personal history or push it to `origin`. Preserve compatibility with the latest available upstream production mobile release (Kai keeps it updated); [personal-build.md](docs/guides/personal-build.md#production-mobile-compatibility-gate) governs acceptance and overrides upstream floor-raising/legacy-removal rules. Kai authorizes deployment after automated checks/backups, followed by his own testing; missing manual audio/mobile/UI acceptance is recorded pending_user_acceptance and does not block deployment.
 
+Personal testing/review uses [efficient personal testing](docs/guides/personal-testing.md): one `gpt-6.1-terra` test subagent with a fresh context, focused checks by default, full weekly coverage and compact log summaries. This overrides the generic expansion defaults below.
+
 ## Language & Syntax
 
 - **Swift 6** strict concurrency mode — use latest Swift 6 syntax throughout
@@ -64,12 +66,9 @@ Always stop the old desktop app, host and iPhone process before running a new bu
 
 Keep only the latest build: in this checkout, Apple builds go to `build/dd` only (no other `-derivedDataPath`, no copies in scratchpads, `/tmp` or Xcode's DerivedData); delete any older Codync build right away, so macOS never launches a stale copy. A git worktree may keep its own single build inside that worktree.
 
-## End-to-end test every change
+## End-to-end validation
 
-After every change, test it end to end on the real apps, not just builds and unit tests: install the new build (old one stopped first) and walk through the changed flow. Drive the desktop app with Playwright (`npm run e2e` against the sandbox) and the iPhone app (iOS Simulator) and Android app (the one shared emulator, never a second: [test devices](docs/guides/dev-app.md#worktree-sandboxes)) with one Maestro run (`apps/maestro`); Computer Use (cua-driver, in the background) only for the native steps they can't reach: [test stack](docs/guides/test-stack.md). Report any check that could not run and why.
-- **Minimal e2e** (default): only the platform of the computer you test on (on the Mac: macOS).
-- **Full e2e** (large changes: platform code, packaging, the desktop main process; or when asked): macOS, Linux (Lima `codync-linux`) and Windows (UTM, [Windows testing](docs/guides/windows-testing.md)). A platform whose VM isn't installed is skipped and reported, not set up.
-- **Desktop build to use**: develop and e2e with `npm run dev` in `apps/desktop` (renderer reloads on save, restart it after `src/main` or preload changes; nothing packaged or signed). In a linked worktree it runs a [sandbox](docs/guides/dev-app.md#worktree-sandboxes) beside the main checkout's Codync Dev (own host build, port and data); `--sandbox` does the same from the main checkout when another session's Codync Dev is running. In the main checkout, after a host change run `node tools/native-host.mjs dev` there first: `npm run dev` prefers that build over `host/target/debug`. Package `npm run dist:mac:dev` (about 45 s) only for what an unpackaged run lacks: the bundled host install, Codync Screen / computer use, system permissions. `dist:*:main` (universal, timestamped, minutes) only to check the production app.
+Personal work follows [efficient personal testing](docs/guides/personal-testing.md). Upstream work follows [test stack](docs/guides/test-stack.md): exercise affected flows on real sandbox apps, record missing checks, and use only existing platform test environments. Build/install and device details: [development](docs/guides/development.md), [worktree sandboxes](docs/guides/dev-app.md#worktree-sandboxes).
 
 ## Versioning
 

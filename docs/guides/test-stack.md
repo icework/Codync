@@ -1,5 +1,10 @@
 # Test stack
 
+**Personal override:** `codex/personal`, its task branches and maintenance use
+[efficient personal testing](personal-testing.md). Its Terra runner, focused E2E,
+review count and evidence-reuse rules take precedence over the generic defaults below.
+
+
 How the end-to-end (e2e) checks drive the apps: Playwright for the desktop app, Maestro for the iPhone and Android apps, and Computer Use only for the native steps neither can reach. Unit and component tests stay as they are (`npm run typecheck && npm test`, `cargo test`, the Swift tests in `apps/ios/Kit`, the Gradle checks).
 
 ## Host tests

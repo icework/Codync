@@ -40,6 +40,11 @@ Rules every change follows, in every part of the repository (host, iOS, desktop,
 
 ## After every change: review, e2e, cleanup
 
+**Personal override:** `codex/personal`, its task branches and maintenance use
+[efficient personal testing](personal-testing.md). Its Terra runner, focused E2E,
+review count and evidence-reuse rules take precedence over the generic defaults below.
+
+
 Once a code change of our own works (its tests pass) and before commit, it goes through three stages, in this order (issues and pull requests from other people go through the [issue and PR review](issue-pr-review.md), which runs these stages on them):
 
 1. **Review**: three read-only reviewers at once: correctness (bugs, regressions, error handling, security, compatibility with older clients and hosts), completeness (every client the change should reach, stale docs and the [user manual](user-docs.md) page, missing tests, version and What's New rules) and refactor (responsibility splits, files past ~500 lines, long functions, layer leaks, missed reuse, language best practices: Swift 6, Rust `rust-skills`, strict TypeScript, Compose). A verifier then tries to refute each correctness and completeness finding against the code. In Claude Code the reviewers and the verifier always run on Opus (`REVIEW_MODEL` in the workflow), whichever model started the session; the fix and e2e agents inherit the session's model.

@@ -33,6 +33,7 @@ impl Hub {
             runtime: Mutex::default(),
             phone_clients: AtomicUsize::new(0),
             usage: Mutex::default(),
+            usage_wake: tokio::sync::Notify::new(),
             keep_awake: Mutex::default(),
             auth: watch::Sender::new(0),
             pairing: Mutex::default(),
@@ -43,6 +44,7 @@ impl Hub {
             screen,
             terms: Arc::default(),
             model_lists: crate::agent::auth::InFlight::default(),
+            dev_servers: crate::dev_servers::DevServers::default(),
         })
     }
 }

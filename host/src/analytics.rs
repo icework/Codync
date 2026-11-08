@@ -27,7 +27,8 @@ pub use reported::track;
 pub use turns::{Steer, TurnOutcome, TurnSource, agent_fell_back, message_steered, turn_finished};
 
 const KV_ENABLED: &str = "analytics_enabled";
-/// The account the install id was last merged into (one `$identify` per account).
+/// The account the install id was merged into. An id merges into one account and a second is
+/// refused, so a later account on this computer starts its own profile.
 const KV_IDENTIFIED: &str = "analytics_identified";
 /// Write-only project token: safe to ship in public builds.
 const TOKEN: &str = "phc_rQHvxdSFKnMquPfMjmiMhXhM4tqJ5qCYsWuVEoFxCCWX";
@@ -71,6 +72,7 @@ pub enum Event {
     TurnFinished,
     /// A turn moved on to the bot's next agent (`agent::fallback`).
     AgentFellBack,
+    UsageReadFailed,
     SessionReset,
     PermissionAnswered,
     ReactionAdded,
@@ -80,6 +82,14 @@ pub enum Event {
     RoutineDeleted,
     RoutineRun,
     RoutineRetried,
+    /// A bot's `start_dev_server` ended (`outcome`).
+    DevServerStarted,
+    /// A dev server ended (`by`).
+    DevServerStopped,
+    /// A person acted on a dev server (`action`).
+    DevServerAction,
+    /// A bot left a server running through its own shell, not `start_dev_server`.
+    DevServerDetected,
     VoiceCallStarted,
     VoiceCallFinished,
     /// How one engine of a call fared (time to ready, reconnects, a phase stuck, failure).
@@ -146,6 +156,7 @@ impl Event {
             Self::TurnStopped => "turn_stopped",
             Self::TurnFinished => "turn_finished",
             Self::AgentFellBack => "agent_fell_back",
+            Self::UsageReadFailed => "usage_read_failed",
             Self::SessionReset => "session_reset",
             Self::PermissionAnswered => "permission_answered",
             Self::ReactionAdded => "reaction_added",
@@ -155,6 +166,10 @@ impl Event {
             Self::RoutineDeleted => "routine_deleted",
             Self::RoutineRun => "routine_run",
             Self::RoutineRetried => "routine_retried",
+            Self::DevServerStarted => "dev_server_started",
+            Self::DevServerStopped => "dev_server_stopped",
+            Self::DevServerAction => "dev_server_action",
+            Self::DevServerDetected => "dev_server_detected",
             Self::VoiceCallStarted => "voice_call_started",
             Self::VoiceCallFinished => "voice_call_finished",
             Self::VoiceCallQuality => "voice_call_quality",
@@ -280,7 +295,7 @@ pub fn capture(hub: &Hub, event: Event, mut properties: Map<String, Value>) {
     }
     let account = hub.cloud.status().owner.map(|o| o.user_id);
     if let Some(user) = &account
-        && hub.store.kv_get(KV_IDENTIFIED).as_deref() != Some(user.as_str())
+        && hub.store.kv_get(KV_IDENTIFIED).is_none()
     {
         // Merges this install's earlier, anonymous events into the account.
         let identify = json!({"$anon_distinct_id": hub.host_id, "$process_person_profile": true});
@@ -409,5 +424,33 @@ mod tests {
     fn computer_tag_matches_the_iphone() {
         // Same vector as the iPhone's AnalyticsTests.
         assert_eq!(computer_tag("AAECAwQFBgcICQoLDA0ODw"), "2d6878bee20aba04");
+    }
+
+    #[test]
+    fn the_install_id_merges_into_the_first_account_only() {
+        use crate::remote::cloud::{Owner, update_status};
+        let dir = std::env::temp_dir().join(format!("codync-analytics-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = Store::open(std::path::Path::new(":memory:")).unwrap();
+        let identity = crate::remote::identity::Identity::load_or_create(&dir).unwrap();
+        let hub = Hub::new(store, "h".into(), identity, "t".into(), 0);
+
+        for user in ["user_1", "user_2"] {
+            update_status(&hub, |s| s.owner = Some(Owner { user_id: user.into(), email: None }));
+            capture(&hub, Event::AppOpened, Map::new());
+        }
+
+        let mut rx = hub.analytics.rx.locked().take().unwrap();
+        let mut sent = Vec::new();
+        while let Ok(Msg::Event(event)) = rx.try_recv() {
+            sent.push(event);
+        }
+        assert_eq!(
+            sent.iter().map(|e| (e["event"].as_str().unwrap(), e["distinct_id"].as_str().unwrap())).collect::<Vec<_>>(),
+            [("$identify", "user_1"), ("app_opened", "user_1"), ("app_opened", "user_2")]
+        );
+        assert_eq!(sent[0]["properties"]["$anon_distinct_id"], "h");
+        assert_eq!(hub.store.kv_get(KV_IDENTIFIED).as_deref(), Some("user_1"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

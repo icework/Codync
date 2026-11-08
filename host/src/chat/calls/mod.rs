@@ -49,14 +49,6 @@ pub enum Speaker {
     Voice,
 }
 
-/// An original GPT-Live transcript delta, preserved when adjacent fragments form one displayed line.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CallFragment {
-    pub delta: String,
-    pub start_ms: i64,
-    pub end_ms: i64,
-}
-
 /// One line of what was said on a call, with when (ms, the app's clock) and the app's id for it, so a line sent
 /// again (its first answer was lost) is kept once.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,8 +64,6 @@ pub struct CallLine {
     pub start_ms: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_ms: Option<i64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub fragments: Vec<CallFragment>,
 }
 
 /// A call in progress, kept in `kv` so a host restart or a dropped client loses nothing: its bot, the transcript
@@ -234,7 +224,6 @@ fn transcript(raw: &Value) -> Vec<CallLine> {
                 id: line.id.filter(|id| checked(id).is_ok()),
                 start_ms: line.start_ms,
                 end_ms: line.end_ms,
-                fragments: line.fragments,
             })
         })
         .take(MAX_LINES)

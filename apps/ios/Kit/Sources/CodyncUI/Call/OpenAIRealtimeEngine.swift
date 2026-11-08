@@ -151,7 +151,8 @@ final class OpenAIRealtimeEngine: VoiceEngine {
             activity = WebRTCAudioActivity(peer: pc) { [weak self] speaking, level in
                 guard let self, self.generation == attempt, !self.ended, self.phase.isActive else { return }
                 self.level = self.muted ? 0 : level
-                self.phase = speaking && !self.outputSuppressed ? .speaking : .listening
+                let phase: VoicePhase = speaking && !self.outputSuppressed ? .speaking : .listening
+                if self.phase != phase { self.phase = phase }
             }
         }
         dropTimer = Task { [weak self] in

@@ -6,6 +6,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.json.*
 
+/** Live sends a transcript delta about every word: adjacent ones of one speaker reach the host as one event. */
+private const val TRANSCRIPT_BATCH_MS = 250L
+private const val TRANSCRIPT_BATCH_CHARS = 4_000
+
+/** `next` joined onto the held delta when it continues it (same speaker, room left), else null. */
+internal fun joinTranscript(held: JsonObject, next: JsonObject): JsonObject? {
+    val joined = held.text("delta") ?: return null
+    val delta = next.text("delta") ?: return null
+    if (held.text("type") != next.text("type") || joined.length + delta.length > TRANSCRIPT_BATCH_CHARS) return null
+    return JsonObject(held + mapOf("delta" to JsonPrimitive(joined + delta), "end_ms" to (next["end_ms"] ?: JsonNull)))
+}
+
 fun isOpenAILiveModel(model: String): Boolean = model.startsWith("gpt-live-") && !model.contains("transcribe")
 
 /** An additive host capability: old hosts must never receive Live start or validation requests. */
@@ -48,6 +60,10 @@ class OpenAILiveEngine(parent: CoroutineScope, settings: VoiceSettings, private 
     private data class HostWork(val generation: Int, val transcript: Boolean, val run: suspend () -> List<JsonObject>)
     private var hostQueue = Channel<HostWork>(256)
     private var hostWorker: Job? = null
+    /** The transcript delta waiting for the next one: (generation, session, event). Received on the peer's thread. */
+    private val heldLock = Any()
+    private var held: Triple<Int, String, JsonObject>? = null
+    private var heldTimer: Job? = null
 
     init { scope.launch { open() } }
 
@@ -76,6 +92,26 @@ class OpenAILiveEngine(parent: CoroutineScope, settings: VoiceSettings, private 
         if (hostQueue.trySend(HostWork(current, transcript, run)).isFailure && !ended) {
             hop { fail("The computer cannot keep up with GPT-Live events.", VoiceFailureKind.Connection) }
         }
+    }
+
+    private fun hold(current: Int, id: String, event: JsonObject) = synchronized(heldLock) {
+        val waiting = held
+        val joined = waiting?.takeIf { it.first == current && it.second == id }?.let { joinTranscript(it.third, event) }
+        if (joined != null) {
+            held = Triple(current, id, joined)
+            return@synchronized
+        }
+        flushTranscript()
+        held = Triple(current, id, event)
+        heldTimer = scope.launch { delay(TRANSCRIPT_BATCH_MS); flushTranscript() }
+    }
+
+    private fun flushTranscript() = synchronized(heldLock) {
+        heldTimer?.cancel()
+        heldTimer = null
+        val (current, id, event) = held ?: return@synchronized
+        held = null
+        enqueueHost(current, transcript = true) { link.liveEvent(id, event) }
     }
 
     private suspend fun open() {
@@ -111,9 +147,11 @@ class OpenAILiveEngine(parent: CoroutineScope, settings: VoiceSettings, private 
             // Preserve received transcripts even when end() retires the local control inbox.
             val type = event.text("type")
             val transcript = type in listOf("session.input_transcript.delta", "session.output_transcript.delta")
-            if (transcript || type in listOf("response.event", "session.delegation.created")) {
-                session?.sessionId?.let { id -> enqueueHost(current, transcript) { link.liveEvent(id, event) } }
-            }
+            if (transcript) session?.sessionId?.let { id -> hold(current, id, event) }
+            else if (type in listOf("response.event", "session.delegation.created")) {
+                flushTranscript()
+                session?.sessionId?.let { id -> enqueueHost(current) { link.liveEvent(id, event) } }
+            } else if (type == "session.closed") flushTranscript()
             hop { if (isCurrent(current)) received(current, event) }
         }
         override fun ice(state: RealtimePeer.Ice) = hop { if (isCurrent(current)) iceChanged(state) }
@@ -203,6 +241,7 @@ class OpenAILiveEngine(parent: CoroutineScope, settings: VoiceSettings, private 
         val id = session?.sessionId ?: return
         while (pending.isNotEmpty() && isCurrent(current)) {
             val (kind, text) = pending.removeFirst()
+            flushTranscript()
             enqueueHost(current) { link.liveUpdate(id, kind, text) }
         }
     }
@@ -239,6 +278,7 @@ class OpenAILiveEngine(parent: CoroutineScope, settings: VoiceSettings, private 
                 System.err.println("GPT-Live closed locally; provider finalization was not confirmed.")
             }
         }
+        flushTranscript()
         hostQueue.close()
         if (withTimeoutOrNull(2_000) { hostWorker?.join(); true } == null) {
             System.err.println("GPT-Live transcript delivery was not confirmed before hanging up.")

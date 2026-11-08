@@ -132,7 +132,7 @@ fn updates_preserve_all_unicode_with_bounded_appends_and_quiet_progress() {
     assert_eq!(reconstructed, original.trim());
     assert_eq!(events.iter().filter(|e| e["type"] == "session.commentary.append").count(), 1);
     assert_eq!(events.last().unwrap()["type"], "session.commentary.append");
-    assert!(protocol::updates("reply", " ").unwrap().is_empty());
+    assert_eq!(protocol::updates("reply", " ").unwrap(), Vec::<Value>::new());
     assert_eq!(protocol::updates("notice", "Approval needed").unwrap()[0]["type"], "session.commentary.append");
     assert!(events.iter().all(|e| e["content"].as_str().unwrap().len() <= 450 && e["delegation_id"].is_null()));
     assert_eq!(protocol::updates("progress", "Testing").unwrap()[0]["type"], "session.thinking.append");
@@ -150,6 +150,7 @@ async fn live_hub() -> Arc<Hub> {
     let slot = hub.live_calls.slot(&hub, "c1").unwrap();
     let mut live = slot.lock().await;
     live.id = "live_1".into();
+    live.owner = "phone".into();
     live.epoch = 100;
     drop(live);
     hub
@@ -167,6 +168,17 @@ async fn another_device_or_old_session_cannot_control_the_call() {
     assert!(update(&hub, &b, "phone").await.is_err());
     hub.store.kv_delete(&super::super::state_key("c1")).unwrap();
     assert!(update(&hub, &b, "phone").await.is_err());
+}
+
+#[tokio::test]
+async fn another_device_cannot_feed_or_close_the_live_session() {
+    let hub = live_hub().await;
+    let body = |event| json!({"callId":"c1","sessionId":"live_1","event":event});
+    assert!(event(&hub, &body(json!({"type":"session.closed","event_id":"x"})), "other").await.is_err());
+    let e = json!({"type":"session.input_transcript.delta","event_id":"u1","delta":"hi","start_ms":0,"end_ms":5});
+    assert!(event(&hub, &body(e.clone()), "other").await.is_err());
+    event(&hub, &body(e), "phone").await.unwrap();
+    assert_eq!(state(&hub.store, "c1").unwrap().lines[0].text, "hi");
 }
 
 #[tokio::test]

@@ -28,6 +28,8 @@ pub struct Calls(Mutex<HashMap<String, Slot>>);
 #[derive(Default)]
 struct Session {
     id: String,
+    /// The device that started this media session; only it may feed it events.
+    owner: String,
     epoch: i64,
     protocol: Protocol,
     heard_user: bool,
@@ -163,6 +165,7 @@ pub async fn start(hub: &Arc<Hub>, b: &Value, owner: &str) -> Result<Value> {
         return Err(e);
     }
     session.id.clone_from(&id);
+    owner.clone_into(&mut session.owner);
     session.epoch = epoch;
     session.heard_user = false;
     session.heard_voice = false;
@@ -179,7 +182,8 @@ pub async fn event(hub: &Arc<Hub>, b: &Value, owner: &str) -> Result<Value> {
     }
     let slot = hub.live_calls.get(call)?;
     let mut session = slot.lock().await;
-    check_session(hub, call, owner, id, &session)?;
+    // Only the in-memory check here: most events never touch the stored call, and those that do check it below.
+    current(&session, owner, id)?;
     let action = session.protocol.receive(&b["event"])?;
     let events = match action {
         Action::None => vec![],
@@ -220,6 +224,15 @@ pub async fn event(hub: &Arc<Hub>, b: &Value, owner: &str) -> Result<Value> {
 
 fn check_session(hub: &Hub, call: &str, owner: &str, id: &str, session: &Session) -> Result<()> {
     owned(hub, call, owner, Some(id))?;
+    current(session, owner, id)
+}
+
+/// `owner`'s media session `id` is the one this slot adopted and still open (`start` resets the slot under its
+/// lock, and a call changing hands ends it).
+fn current(session: &Session, owner: &str, id: &str) -> Result<()> {
+    if session.owner != owner {
+        bail!("Only the device holding this call may control it.");
+    }
     if session.id != id || session.protocol.closed {
         bail!("This Live session is no longer active.");
     }

@@ -1,8 +1,7 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { BotStore } from '../../store/bot-store'
 import { StoreContext, useApp } from '../../store/context'
 import { useAccount } from '../../store/account'
-import { useModel } from '../../lib/observable'
 import { stopDictation } from '../thread/dictation'
 import { CallView } from './CallView'
 import { acquireCallMicrophone } from './call-microphone'
@@ -34,7 +33,10 @@ export function GlobalCallProvider({ children }: { children: ReactNode }) {
   const current = useRef<ActiveCall | null>(null)
   const [speaking, setSpeaking] = useState(false)
   const interrupt = useRef<(() => void) | null>(null)
-  useModel(active?.store)
+  // Only whether the call lost its bot or computer, not every change of the store (a streaming reply), renders here.
+  const userId = account.user?.userId ?? null
+  const lost = useSyncExternalStore(active ? active.store.subscribe : noSubscription,
+    () => active !== null && callLost(active, app.store(active.store.computer.id), userId))
 
   const end = () => {
     current.current?.releaseMicrophone()
@@ -55,20 +57,16 @@ export function GlobalCallProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (!active) return
-    const identityChanged = active.accountId !== (account.user?.userId ?? null)
-    const storeReplaced = app.store(active.store.computer.id) !== active.store
-    const hostChanged = active.hostId !== null && active.store.hostIdentity !== null && active.hostId !== active.store.hostIdentity
-    const deleted = active.store.connection.kind === 'online' && !active.store.bots.has(active.botId)
-    if (identityChanged || storeReplaced || hostChanged || deleted || active.store.mismatch) {
-      end()
-      app.setError(trNow('The call ended because its bot or computer connection changed. Start a new call when it is available.'))
-    }
-  })
+    if (!lost) return
+    end()
+    app.setError(trNow('The call ended because its bot or computer connection changed. Start a new call when it is available.'))
+  }, [lost])
   useEffect(() => () => { current.current?.releaseMicrophone(); current.current = null }, [])
 
+  const calls = useMemo<Calls>(() => ({ active, speaking, start, interrupt: () => interrupt.current?.() }), [active, speaking])
+
   return (
-    <CallContext.Provider value={{ active, speaking, start, interrupt: () => interrupt.current?.() }}>
+    <CallContext.Provider value={calls}>
       {children}
       {active ? (
         <div className="global-call-overlay">
@@ -81,4 +79,14 @@ export function GlobalCallProvider({ children }: { children: ReactNode }) {
       ) : null}
     </CallContext.Provider>
   )
+}
+
+const noSubscription = () => () => {}
+
+/** The call's account, computer, host or bot is gone or changed under it. */
+function callLost(call: ActiveCall, current: BotStore | null, userId: string | null) {
+  const { store } = call
+  const hostChanged = store.hostIdentity !== null && call.hostId !== store.hostIdentity
+  const deleted = store.connection.kind === 'online' && !store.bots.has(call.botId)
+  return call.accountId !== userId || current !== store || hostChanged || deleted || store.mismatch
 }

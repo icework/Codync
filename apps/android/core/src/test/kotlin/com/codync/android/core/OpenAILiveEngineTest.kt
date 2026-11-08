@@ -155,6 +155,26 @@ class OpenAILiveEngineTest {
         assertEquals(listOf("session.close"), peer.sent.map { it.text("type") })
     }
 
+    @Test fun adjacentTranscriptDeltasOfOneSpeakerReachTheHostAsOneEvent() = runTest {
+        val peer = Peer(); val link = Link()
+        val engine = OpenAILiveEngine(backgroundScope, VoiceSettings(), "gpt-live-1", "marin", link, peer)
+        runCurrent(); peer.event("{\"type\":\"session.started\"}"); runCurrent()
+        peer.event("{\"type\":\"session.input_transcript.delta\",\"event_id\":\"a\",\"delta\":\"Open \",\"start_ms\":0,\"end_ms\":10}")
+        peer.event("{\"type\":\"session.input_transcript.delta\",\"event_id\":\"b\",\"delta\":\"app.ts\",\"start_ms\":10,\"end_ms\":20}")
+        peer.event("{\"type\":\"session.output_transcript.delta\",\"event_id\":\"c\",\"delta\":\"Sure\",\"start_ms\":20,\"end_ms\":30}")
+        peer.event("{\"type\":\"response.event\"}")
+        runCurrent()
+        assertEquals(listOf("session.input_transcript.delta", "session.output_transcript.delta", "response.event"),
+            link.events.map { it.second.text("type") })
+        val first = link.events.first().second
+        assertEquals("Open app.ts", first.text("delta")); assertEquals("a", first.text("event_id"))
+        assertEquals(20, first["end_ms"]?.jsonPrimitive?.int)
+        peer.event("{\"type\":\"session.output_transcript.delta\",\"event_id\":\"d\",\"delta\":\"Done\",\"start_ms\":40,\"end_ms\":50}")
+        runCurrent(); assertEquals(3, link.events.size)
+        advanceTimeBy(251); runCurrent(); assertEquals(4, link.events.size)
+        engine.end(); engine.awaitEnd()
+    }
+
     @Test fun onlyLiveConversationModelsUseLiveTransport() {
         assertTrue(isOpenAILiveModel("gpt-live-1")); assertTrue(isOpenAILiveModel("gpt-live-1.1"))
         assertFalse(isOpenAILiveModel("gpt-live-transcribe")); assertFalse(isOpenAILiveModel("gpt-realtime-2.1"))

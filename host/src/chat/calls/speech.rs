@@ -97,15 +97,8 @@ mod tests {
 
     #[test]
     fn a_replaced_session_hears_the_newest_of_the_call_so_far() {
-        let line = |from, text: &str| CallLine {
-            from,
-            text: text.into(),
-            at: None,
-            id: None,
-            start_ms: None,
-            end_ms: None,
-            fragments: Vec::new(),
-        };
+        let line =
+            |from, text: &str| CallLine { from, text: text.into(), at: None, id: None, start_ms: None, end_ms: None };
         let lines =
             [line(Speaker::User, "first thing"), line(Speaker::Voice, "noted"), line(Speaker::User, "second thing")];
         assert_eq!(call_so_far(&lines, 1_000), "User: first thing\nYou: noted\nUser: second thing");

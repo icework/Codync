@@ -197,10 +197,12 @@ export class OpenAIRealtimeEngine extends VoiceEngine {
         stats.forEach((report) => {
           if (report.type === 'inbound-rtp' && report.kind === 'audio' && report.audioLevel > 0.01) playing = true
         })
-        this.setPhase(playing && !this.playbackMuted ? 'speaking' : 'listening')
+        const phase = playing && !this.playbackMuted ? 'speaking' : 'listening'
+        // Most reads change nothing: re-rendering the call on each one keeps the window busy.
+        if (phase !== this.phase) this.setPhase(phase)
       }).catch(() => { /* ICE events handle connection failures; missing stats do not terminate audio. */ })
         .finally(() => { reading = false })
-    }, 150)
+    }, 250)
   }
 
   private release() {

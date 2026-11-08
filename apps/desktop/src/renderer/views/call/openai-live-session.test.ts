@@ -131,3 +131,22 @@ test('provider closure and provider errors have distinct content-free failure ca
   failed.session.receive({ type: 'error', error: { message: 'private provider detail' } })
   assert.deepEqual(failed.details, ['provider_error'])
 })
+
+test('adjacent transcript deltas of one speaker reach the host as one event, in order with other events', async () => {
+  const c = fixture()
+  await c.session.start('gpt-live-1', 'marin', 'offer')
+  c.session.receive({ type: 'session.input_transcript.delta', event_id: 'a', delta: 'Open ', start_ms: 0, end_ms: 10 })
+  c.session.receive({ type: 'session.input_transcript.delta', event_id: 'b', delta: 'app.ts', start_ms: 10, end_ms: 20 })
+  c.session.receive({ type: 'session.output_transcript.delta', event_id: 'c', delta: 'Sure', start_ms: 20, end_ms: 30 })
+  c.session.receive({ type: 'response.event', event_id: 'd' })
+  await tick()
+  assert.deepEqual(c.seen, [
+    'offer',
+    { id: 'live-one', event: { type: 'session.input_transcript.delta', event_id: 'a', delta: 'Open app.ts', start_ms: 0, end_ms: 20 } },
+    { id: 'live-one', event: { type: 'session.output_transcript.delta', event_id: 'c', delta: 'Sure', start_ms: 20, end_ms: 30 } },
+    { id: 'live-one', event: { type: 'response.event', event_id: 'd' } },
+  ])
+  c.session.receive({ type: 'session.output_transcript.delta', event_id: 'e', delta: 'Done', start_ms: 40, end_ms: 50 })
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  assert.equal(c.seen.length, 5, 'a held delta goes out on its own once the batch window passes')
+})

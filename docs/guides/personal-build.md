@@ -298,8 +298,12 @@ separate states, each recorded in a local receipt and timestamped Chinese report
    rebuilding. Preserve the production Screen service settings. Back up the whole
    app as a non-launchable archive, host data, desktop settings and launch-agent
    plist locally. Exclude sockets; preserve symlinks and permissions. Make a
-   consistent SQLite snapshot and verify integrity/archive readability. Keep
-   backup directories 0700 and archives 0600. No private data goes to Git.
+   consistent SQLite snapshot and verify integrity/archive readability. A tar restore
+   must include `codync.db` and any `codync.db-wal` / `codync.db-shm` under their
+   original names in a private directory: stopping the host does not guarantee an
+   empty WAL. Compare restored row counts and preserved IDs/content with the
+   snapshot; never test recovery by overwriting or checkpointing production data.
+   Keep backup directories 0700 and archives 0600. No private data goes to Git.
 7. Build the candidate with the local signing identity. On failure restore/start
    the previous MacBook app/service. Verify signature, main environment, P icon,
    bundled speech/Screen helpers and **both** personal updater guards before
@@ -318,6 +322,8 @@ separate states, each recorded in a local receipt and timestamped Chinese report
    Cloud assistants switch was off and can be enabled for its existing account.
 9. **Only after MacBook acceptance**, package that exact signed app, checksum it,
    transfer the artifact (never data) to Mac mini, and verify checksum/architecture.
+   Validate the remote process's explicit exit code and a nonempty structured result;
+   an SSH shell exit status alone is insufficient and may hide a failed child.
    Recheck mini idle state and collect its own backup on the mini. Stop its old
    app/host, replace the app, install the bundled host and launch it. Verify the
    same health/identity/data/account checks and actual MCP host roundtrip. Check

@@ -56,6 +56,8 @@ public final class BotStore {
     static let actionPatience: Duration = .seconds(20)
     /// Actions waiting for the link to come back.
     var waiting = 0
+    /// Held messages share one ordered drain across reconnect notifications.
+    @ObservationIgnored var sendingHeld = false
     public internal(set) var hostRoute: HostRoute?
     var clientGeneration = UUID()
     var verifiedClientGeneration: UUID?
@@ -113,8 +115,6 @@ public final class BotStore {
     var onRosterChanged: (@MainActor () -> Void)?
     /// The computer's addresses or keys changed (merged from its `hello`); persist it.
     var onComputerChanged: (@MainActor (Computer) -> Void)?
-    /// Its `hello` says this phone paired without the computer joining the account (`Hello.joinAccount`).
-    var onJoinAccount: (@MainActor (HostClient) -> Void)?
 
     public let storage: SharedStore.Context
     /// Opens a channel to the computer as it is now: its route, and the addresses and keys merged since.
@@ -195,6 +195,15 @@ public final class BotStore {
     public var canQueue: Bool {
         // Only the warning is delayed; relay delivery can queue during that grace.
         if case .computerOffline = heldDrop ?? connection { computer.boxKey != nil && transport is any RemoteTransport } else { false }
+    }
+
+    /// Can't reach a computer with no relay: text waits on this phone until it can (`sendHeld`).
+    public var holdsOnPhone: Bool {
+        guard computer.cloud == nil else { return false }
+        switch connection {
+        case .connecting, .offline: return true
+        default: return false
+        }
     }
 
     /// What headers show: a reconnect the grace period keeps quiet reads "Connecting…"

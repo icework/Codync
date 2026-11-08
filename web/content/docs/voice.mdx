@@ -171,3 +171,8 @@ Signing out, deleting its bot or replacing the computer connection can still end
 call. The app will not redirect your microphone to a different bot just because you
 opened its chat. Phone navigation changes require an updated phone client; an
 upstream phone app remains compatible with the personal Host but keeps its own UI.
+
+If a voice message fails to send while the computer reconnects, it stays marked
+failed. Codync does not automatically send it to a replacement computer or turn
+Retry into a new request. Return to the original conversation and send it again.
+Ordinary offline messages keep their usual retry behavior.

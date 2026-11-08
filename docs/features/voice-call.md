@@ -230,6 +230,14 @@ ids sorted into realtime, transcribe and tts models; Gemini `GET v1beta/models` 
 `bidiGenerateContent` / `generateContent` and name; translation and diarization models left out), fetched after a successful test and each time the form opens. The call bar
 shows the provider's name next to the dots whenever audio leaves the device.
 
+### Failed voice messages after reconnecting
+
+A voice message stays bound to the host and call that created it. If delivery fails,
+it is not added to the phone's automatic offline resend queue, and the generic
+Retry action cannot turn it into a new message on a replacement host. The failed
+row stays visible; return to the original conversation and send the request again.
+Ordinary offline messages still use the existing ordered retry flow.
+
 ### Where the key lives
 
 - On the computer, in the host's vault (`host/src/voice.rs`, slot `voice`: encrypted in

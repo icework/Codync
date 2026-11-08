@@ -89,13 +89,21 @@ fun AppStore.loadHistory() {
     }
 }
 
-fun AppStore.retry(send: PendingSend) = action("send:" + send.nonce) { deliver(send.copy(status = SendStatus.Sending, error = null)) }
+fun AppStore.retry(send: PendingSend) = action("send:" + send.nonce) {
+    check(send.call == null) { VOICE_RESEND_UNAVAILABLE }
+    deliver(send.copy(status = SendStatus.Sending, error = null))
+}
 fun AppStore.discard(send: PendingSend) = action("discard:" + send.nonce) {
     require(send.status == SendStatus.Failed) { "Cancel a queued message before discarding it." }
     withContext(Dispatchers.IO) { requireNotNull(database).discard(send.nonce) }
     refresh()
 }
 fun AppStore.cancelQueued(send: PendingSend) = action("cancel:" + send.nonce) {
+    if (discardsOnPhone(state.value.computer.cloud, send.status)) {
+        withContext(Dispatchers.IO) { requireNotNull(database).discard(send.nonce) }
+        refresh()
+        return@action
+    }
     val active = requireNotNull(channel) { "Reconnect to the relay to cancel this message." }
     when (active.cancelQueued(send.nonce)) {
         "cancelled" -> { withContext(Dispatchers.IO) { requireNotNull(database).discard(send.nonce) }; refresh() }
@@ -108,6 +116,7 @@ internal suspend fun AppStore.deliver(send: PendingSend, expectedHostId: String?
     if (!sends.add(send.nonce)) return
     try {
         if (state.value.entries.any { it.botId == send.botId && it.clientNonce == send.nonce }) return
+        check(send.call == null || expectedHostId != null) { VOICE_RESEND_UNAVAILABLE }
         savePending(send)
         val active = channel
         if (active?.state?.value is LinkState.ComputerOffline && send.files.isEmpty() && send.call == null) {
@@ -147,12 +156,29 @@ internal suspend fun AppStore.deliver(send: PendingSend, expectedHostId: String?
         withContext(NonCancellable) { savePending(send.copy(status = SendStatus.Failed, error = "Sending was interrupted. Retry uses the same message ID.")) }
         throw error
     } catch (error: Exception) {
-        savePending(send.copy(status = SendStatus.Failed, error = error.message ?: "Couldn't send."))
+        savePending(afterFailure(send, state.value.computer.cloud, error))
     } finally {
         sends.remove(send.nonce)
         mutableState.update { it.copy(uploadProgress = it.uploadProgress - send.nonce) }
     }
 }
+
+internal const val VOICE_RESEND_UNAVAILABLE = "This voice message wasn't sent. Start a new call or send it as a new chat message."
+
+/** A send that failed. With no relay holding it, a message waits here until the computer can be reached (`reconcileMailbox`). */
+internal fun afterFailure(send: PendingSend, cloud: String?, error: Exception): PendingSend =
+    if (send.call == null && cloud == null && error is IOException && error !is HostError) send.copy(status = SendStatus.Held)
+    else send.copy(status = SendStatus.Failed, error = error.message ?: "Couldn't send.")
+
+/** Can't reach a computer with no relay: text waits on this phone until it can (iOS `BotStore.holdsOnPhone`). */
+internal fun holdsOnPhone(cloud: String?, link: LinkState): Boolean = cloud == null && when (link) {
+    LinkState.Connecting -> true
+    is LinkState.Failed -> link.status !in listOf(403, 426)
+    else -> false
+}
+
+/** No relay holds it, so taking it back touches only this phone (iOS `BotStore.cancelQueued`). */
+internal fun discardsOnPhone(cloud: String?, status: SendStatus): Boolean = cloud == null || status == SendStatus.Held
 
 internal suspend fun AppStore.savePending(send: PendingSend) {
     withContext(Dispatchers.IO) { requireNotNull(database).save(send) }

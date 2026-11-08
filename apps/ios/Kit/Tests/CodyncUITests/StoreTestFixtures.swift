@@ -85,6 +85,15 @@ actor FakeRemote: RemoteTransport {
         while holdHello { try await Task.sleep(for: .milliseconds(10)) }
     }
 
+    private var holdSends = false
+    private(set) var sendsWaiting = 0
+    func holdSends(_ hold: Bool) { holdSends = hold }
+    private func awaitSend() async throws {
+        sendsWaiting += 1
+        defer { sendsWaiting -= 1 }
+        while holdSends { try await Task.sleep(for: .milliseconds(10)) }
+    }
+
     init(_ state: LinkState) { self.state = state }
 
     var subscribed: Bool { !eventSinks.isEmpty }
@@ -142,6 +151,7 @@ actor FakeRemote: RemoteTransport {
 
     nonisolated func call(_ method: String, body: Data, timeout: TimeInterval) async throws -> Data {
         if method == "hello" { try await awaitHello() }
+        if method == "send" { try await awaitSend() }
         if method == "setUsageOrder" { await receiveUsageOrder(body) }
         return try await respond(method, body)
     }
@@ -165,7 +175,16 @@ actor FakeRemote: RemoteTransport {
         AsyncStream { c in Task { await self.addState(c) } }
     }
 
-    nonisolated func computerUpdates() -> AsyncStream<Computer> { AsyncStream { _ in } }
+    private var computerSinks: [AsyncStream<Computer>.Continuation] = []
+    private func addComputer(_ c: AsyncStream<Computer>.Continuation) { computerSinks.append(c) }
+    /// What the host's `hello` says about the computer, once the link is up.
+    func emit(_ computer: Computer) {
+        for s in computerSinks { s.yield(computer) }
+    }
+
+    nonisolated func computerUpdates() -> AsyncStream<Computer> {
+        AsyncStream { c in Task { await self.addComputer(c) } }
+    }
 
     private var enqueueError: (any Error)?
     /// Every later `enqueue` throws `error`.

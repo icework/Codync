@@ -123,3 +123,31 @@ test('cached online state cannot release call RPCs before the new transport veri
     expect(result).toEqual({ beforeHello: { settled: false, dispatched: 0 }, rejected: true, dispatched: 0 })
   } finally { await browser.close() }
 })
+
+test('retrying a failed voice message keeps its row and refuses a new unguarded send', async () => {
+  const { browser, page } = await attach()
+  try {
+    const result = await page.evaluate(async () => {
+      const path = '/store/bot-store.ts'
+      const { BotStore } = await import(path)
+      const scope = `voice-retry-${crypto.randomUUID()}`
+      const store = new BotStore({ id: scope, name: 'Fixture host', signKey: '', urls: [] }, true,
+        () => { throw new Error('No network transport is allowed in this fixture') }, '2.42.1', scope)
+      const entry = { id: 'local-voice', seq: 1, botId: 'fixture-bot', rev: 0, kind: 'user', turn: 0,
+        data: { text: 'Synthetic voice request', status: 'failed', clientNonce: 'voice', call: 'original-call' },
+        createdAt: 1, updatedAt: 1 }
+      let sends = 0
+      store.send = () => { sends++ }
+      store.upsert(entry)
+      try {
+        store.retry(entry)
+        const rows = store.entries.get(entry.botId) ?? []
+        return { sends, rows: rows.map((row: typeof entry) => ({ id: row.id, status: row.data.status, call: row.data.call })),
+          error: store.lastError }
+      } finally { store.retire() }
+    })
+    expect(result.sends).toBe(0)
+    expect(result.rows).toEqual([{ id: 'local-voice', status: 'failed', call: 'original-call' }])
+    expect(result.error).toBe('This voice message cannot be retried. Return to the original conversation and send it again.')
+  } finally { await browser.close() }
+})

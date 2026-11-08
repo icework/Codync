@@ -107,7 +107,7 @@ private fun AppStore.begin(call: VoiceBinding, provider: VoiceProvider?) {
             }
             // WebRTC records the microphone itself.
             provider == VoiceProvider.OpenAI && isOpenAILiveModel(model) ->
-                OpenAILiveEngine(contextScope, settings, model, voice, link, WebRtcPeer(getApplication()))
+                OpenAILiveEngine(contextScope, settings, model, voice, link, WebRtcPeer(application))
             provider == VoiceProvider.OpenAI -> OpenAIRealtimeEngine(contextScope, settings, model, voice,
                 choices.model(provider, VoiceChoices.Model.Transcribe), link, WebRtcPeer(application)) { secret, offer ->
                 OpenAIRealtimeEngine.answer(voiceHttp, secret, offer)

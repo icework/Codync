@@ -44,6 +44,7 @@ pub(in crate::chat::calls) fn bot(id: &str, name: &str, cwd: &str) -> BotConfig 
         created_by: None,
         shared_memory: Some(true),
         harness_memory: false,
+        compaction: codync_mem::compaction::Threshold::Early,
         auto_name: false,
         lead: false,
         created_at: 0,

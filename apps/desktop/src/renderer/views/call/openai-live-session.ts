@@ -4,6 +4,13 @@ import type { CallLink } from './call-link'
 export const isLiveModel = (model: string) => model.startsWith('gpt-live-') && !model.includes('transcribe')
 export type LiveUpdateKind = 'reply' | 'notice' | 'progress'
 
+/** Live sends a transcript delta about every word: adjacent ones of one speaker reach the host as one event. */
+const TRANSCRIPT_BATCH_MS = 250
+const TRANSCRIPT_BATCH_CHARS = 4_000
+type LiveEvent = Record<string, unknown>
+const isTranscript = (event: LiveEvent) =>
+  event.type === 'session.input_transcript.delta' || event.type === 'session.output_transcript.delta'
+
 /** The host owns Live's transcripts and Responses tool routing. This adapter only carries its events. */
 export class OpenAILiveSession {
   private sessionId: string | null = null
@@ -12,6 +19,8 @@ export class OpenAILiveSession {
   private queue: Promise<void> = Promise.resolve()
   private closed: (() => void) | null = null
   private queued = 0
+  private pending: LiveEvent | null = null
+  private pendingTimer: ReturnType<typeof setTimeout> | undefined
   private link: Pick<CallLink, 'startLive' | 'liveEvent' | 'liveUpdate'>
   private send: (event: unknown) => void
   private failed: (message: string, detail: VoiceFailureDetail) => void
@@ -29,28 +38,38 @@ export class OpenAILiveSession {
     return answer.sdp
   }
 
-  receive(event: Record<string, unknown>) {
+  receive(event: LiveEvent) {
     if (event.type === 'session.closed') {
+      this.flush()
       this.closed?.()
       if (!this.closing && !this.stopped) this.failed('OpenAI closed the Live session.', 'session_closed')
       return
     }
-    const transcript = event.type === 'session.input_transcript.delta' || event.type === 'session.output_transcript.delta'
+    const transcript = isTranscript(event)
     if (this.stopped || (this.closing && !transcript)) return
     if (event.type === 'error' || event.type === 'session.error') {
       this.failed((event.error as { message?: string } | undefined)?.message ?? 'OpenAI Live reported an error.', 'provider_error')
       return
     }
     if (!['response.event', 'session.input_transcript.delta', 'session.output_transcript.delta', 'session.delegation.created'].includes(String(event.type))) return
-    this.enqueue((id) => this.link.liveEvent(id, event), transcript)
+    if (transcript) this.hold(event)
+    else {
+      this.flush()
+      this.enqueue((id) => this.link.liveEvent(id, event))
+    }
   }
 
   update(kind: LiveUpdateKind, text: string) {
+    this.flush()
     this.enqueue((id) => this.link.liveUpdate(id, kind, text))
   }
 
   /** Invalidate every outstanding host result before a replacement connection is created. */
-  discard() { this.stopped = true }
+  discard() {
+    this.stopped = true
+    clearTimeout(this.pendingTimer)
+    this.pending = null
+  }
 
   async shutdown() {
     if (this.closing) return
@@ -62,6 +81,7 @@ export class OpenAILiveSession {
       this.send({ type: 'session.close' })
     })
     clearTimeout(timer)
+    this.flush()
     const drained = await new Promise<boolean>((resolve) => {
       timer = setTimeout(() => resolve(false), 2_000)
       void this.queue.then(() => resolve(true))
@@ -71,6 +91,28 @@ export class OpenAILiveSession {
     this.stopped = true
     this.closed = null
     if (!confirmed) console.warn('OpenAI Live closed without a final session.closed acknowledgement.')
+  }
+
+  /** Joins a transcript delta onto the held one when it continues it; it waits at most [TRANSCRIPT_BATCH_MS]. */
+  private hold(event: LiveEvent) {
+    const held = this.pending
+    if (held && held.type === event.type && typeof held.delta === 'string' && typeof event.delta === 'string'
+      && held.delta.length + event.delta.length <= TRANSCRIPT_BATCH_CHARS) {
+      this.pending = { ...held, delta: held.delta + event.delta, end_ms: event.end_ms }
+      return
+    }
+    this.flush()
+    this.pending = event
+    this.pendingTimer = setTimeout(() => this.flush(), TRANSCRIPT_BATCH_MS)
+  }
+
+  private flush() {
+    clearTimeout(this.pendingTimer)
+    this.pendingTimer = undefined
+    const event = this.pending
+    if (!event) return
+    this.pending = null
+    this.enqueue((id) => this.link.liveEvent(id, event), true)
   }
 
   private enqueue(run: (id: string) => Promise<{ events: unknown[] }>, transcript = false) {

@@ -13,6 +13,8 @@ export interface LevelSample {
 const SPACING = 8
 /** Seconds for the connecting segment's trip there and back. */
 const PERIOD = 2.4
+/** Milliseconds between drawn frames: 30 fps is smooth for these dots and spares the GPU on 120 Hz screens. */
+const FRAME_MS = 1000 / 30
 
 /**
  * A dotted line that follows your voice while listening, ripples while the other side talks,
@@ -46,13 +48,24 @@ export function LevelDots({ sample, color, width, height = 16, label, className 
     /** 1 while connecting, 0 for the dots; eased between them for the fade. */
     let mix = 0
     let last = 0
+    /** What the resting row was last drawn in; it stays on the canvas until something changes. */
+    let still = ''
     const draw = (now: number) => {
+      frame = requestAnimationFrame(draw)
+      if (last && now - last < FRAME_MS - 1) return
       const { sample, color, dark, reduceMotion } = live.current
       const { level, speaking = false, working = false, connecting = false } = sample()
       const t = reduceMotion ? 0 : now / 1000
       const accent = dark ? '#ffffff' : '#000000'
       const tint = color ?? accent
       const target = connecting ? 1 : 0
+      const resting = !connecting && mix < 0.01 && (reduceMotion || (!speaking && !working && level <= 0.05))
+      const look = resting ? `${tint}|${speaking}|${working}|${level > 0.05 ? level : 0}` : ''
+      if (resting && look === still) {
+        last = now
+        return
+      }
+      still = look
       mix = reduceMotion || !last ? target : mix + (target - mix) * Math.min(1, ((now - last) / 1000) * 8)
       last = now
       ctx.setTransform(scale, 0, 0, scale, 0, 0)
@@ -72,7 +85,6 @@ export function LevelDots({ sample, color, width, height = 16, label, className 
         ctx.fill()
       }
       ctx.globalAlpha = 1
-      frame = requestAnimationFrame(draw)
     }
     frame = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(frame)

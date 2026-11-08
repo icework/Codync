@@ -121,4 +121,25 @@ struct LiveCallTransportTests {
         #expect(forwarded == ["response.event", "session.input_transcript.delta", "session.output_transcript.delta"].map { String(decoding: event($0), as: UTF8.self) })
         #expect(sent == [event("session.close")])
     }
+
+    @Test func adjacentTranscriptDeltasOfOneSpeakerReachTheHostAsOneEvent() async throws {
+        var forwarded: [[String: Any]] = []
+        let bridge = LiveCallTransport(event: { _, data in
+            forwarded.append(try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any]))
+            return []
+        }, update: { _, _, _ in [] }, send: { _ in }, ready: {}, failed: { _ in })
+        bridge.attach("batched")
+        bridge.receive(Data(#"{"type":"session.input_transcript.delta","event_id":"a","delta":"Open ","start_ms":0,"end_ms":10}"#.utf8))
+        bridge.receive(Data(#"{"type":"session.input_transcript.delta","event_id":"b","delta":"app.ts","start_ms":10,"end_ms":20}"#.utf8))
+        bridge.receive(Data(#"{"type":"session.output_transcript.delta","event_id":"c","delta":"Sure","start_ms":20,"end_ms":30}"#.utf8))
+        bridge.receive(event("response.event"))
+        await settle()
+        #expect(forwarded.map { $0["type"] as? String } == ["session.input_transcript.delta", "session.output_transcript.delta", "response.event"])
+        #expect(forwarded[0]["delta"] as? String == "Open app.ts")
+        #expect(forwarded[0]["event_id"] as? String == "a")
+        #expect(forwarded[0]["end_ms"] as? Int == 20)
+        bridge.receive(Data(#"{"type":"session.output_transcript.delta","event_id":"d","delta":"Done","start_ms":40,"end_ms":50}"#.utf8))
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(forwarded.count == 4, "a held delta goes out on its own once the batch window passes")
+    }
 }

@@ -1,10 +1,9 @@
-//! Merge adjacent Live fragments for display without losing their original text or timing.
+//! Merge adjacent Live transcript deltas into display lines, keeping their exact text and provider timing.
 
-use super::super::{CallFragment, CallLine, CallState, Speaker};
+use super::super::{CallLine, CallState, Speaker};
 
 const GAP_MS: i64 = 1_500;
 const LINE_BYTES: usize = 2_000;
-const MAX_FRAGMENTS: usize = 128;
 
 /// Fragments may cross storage-line limits, but never a speaker, pause or session boundary.
 pub(in crate::chat::calls) fn continues(last: &CallLine, speaker: Speaker, start_ms: i64, epoch: i64) -> bool {
@@ -21,17 +20,12 @@ pub(super) fn append(s: &mut CallState, speaker: Speaker, text: &str, start_ms: 
             end -= 1;
         }
         let (piece, tail) = rest.split_at(end);
-        let fragment = CallFragment { delta: piece.to_owned(), start_ms, end_ms };
         let unheard = s.lines.len() > s.handoff;
         if let Some(last) = s.lines.last_mut().filter(|last| {
-            unheard
-                && continues(last, speaker, start_ms, epoch)
-                && last.text.len() + piece.len() <= LINE_BYTES
-                && last.fragments.len() < MAX_FRAGMENTS
+            unheard && continues(last, speaker, start_ms, epoch) && last.text.len() + piece.len() <= LINE_BYTES
         }) {
             last.text.push_str(piece);
             last.end_ms = Some(last.end_ms.unwrap_or(end_ms).max(end_ms));
-            last.fragments.push(fragment);
         } else {
             super::super::append(
                 s,
@@ -42,7 +36,6 @@ pub(super) fn append(s: &mut CallState, speaker: Speaker, text: &str, start_ms: 
                     id: Some(uuid::Uuid::new_v4().to_string()),
                     start_ms: Some(start_ms),
                     end_ms: Some(end_ms),
-                    fragments: vec![fragment],
                 }],
             );
         }
@@ -55,13 +48,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn word_fragments_form_one_line_and_keep_original_deltas() {
+    fn word_deltas_form_one_line_with_exact_text_and_timing() {
         let mut s = CallState::new("b");
         append(&mut s, Speaker::User, "Open app", 10, 20, 100);
         append(&mut s, Speaker::User, ".ts", 20, 30, 100);
         assert_eq!(s.lines.len(), 1);
         assert_eq!(s.lines[0].text, "Open app.ts");
-        assert_eq!(s.lines[0].fragments.iter().map(|f| f.delta.as_str()).collect::<Vec<_>>(), ["Open app", ".ts"]);
         assert_eq!((s.lines[0].start_ms, s.lines[0].end_ms), (Some(10), Some(30)));
         // A handoff must never skip words appended afterwards.
         s.handoff = s.lines.len();

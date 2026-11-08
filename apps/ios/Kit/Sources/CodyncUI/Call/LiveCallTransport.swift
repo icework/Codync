@@ -19,6 +19,11 @@ final class LiveCallTransport {
     private var closing = false
     private var started = false
     private var pending: [(CallCue.Kind, String)] = []
+    /// Live sends a transcript delta about every word: adjacent ones of one speaker reach the host as one event.
+    private var held: (message: [String: Any], data: Data)?
+    private var heldTimer: Task<Void, Never>?
+    private static let transcriptBatch = Duration.milliseconds(250)
+    private static let transcriptBatchChars = 4_000
     private(set) var sessionId: String?
     private(set) var isClosed = false
 
@@ -50,6 +55,7 @@ final class LiveCallTransport {
         guard let message = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let type = message["type"] as? String else { return }
         if type == "session.closed" {
+            flushTranscript()
             isClosed = true
             if !closing && !stopped { failed("The GPT-Live session ended.") }
             return
@@ -72,7 +78,9 @@ final class LiveCallTransport {
         }
         guard ["response.event", "session.input_transcript.delta", "session.output_transcript.delta",
                "session.delegation.created"].contains(type), let sessionId else { return }
-        enqueue(transcript: transcript) { [eventRequest] in try await eventRequest(sessionId, data) }
+        if transcript { return hold(message, data, type: type) }
+        flushTranscript()
+        enqueue { [eventRequest] in try await eventRequest(sessionId, data) }
     }
 
     func update(_ kind: CallCue.Kind, _ text: String) {
@@ -83,6 +91,7 @@ final class LiveCallTransport {
             pending.append((kind, text))
             return
         }
+        flushTranscript()
         enqueue { [updateRequest] in try await updateRequest(sessionId, kind, text) }
     }
 
@@ -92,6 +101,9 @@ final class LiveCallTransport {
         queue?.cancel()
         queue = nil
         pending.removeAll()
+        heldTimer?.cancel()
+        heldTimer = nil
+        held = nil
     }
 
     func requestClose() {
@@ -102,11 +114,42 @@ final class LiveCallTransport {
     }
 
     func drain() async -> Bool {
+        flushTranscript()
         let deadline = ContinuousClock.now + .seconds(2)
         while queued > 0, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(20))
         }
         return queued == 0
+    }
+
+    /// Joins a transcript delta onto the held one when it continues it; it waits at most `transcriptBatch`.
+    private func hold(_ message: [String: Any], _ data: Data, type: String) {
+        if let current = held, current.message["type"] as? String == type,
+           let joined = current.message["delta"] as? String, let delta = message["delta"] as? String,
+           joined.count + delta.count <= Self.transcriptBatchChars {
+            var merged = current.message
+            merged["delta"] = joined + delta
+            merged["end_ms"] = message["end_ms"]
+            if let encoded = try? JSONSerialization.data(withJSONObject: merged) {
+                held = (merged, encoded)
+                return
+            }
+        }
+        flushTranscript()
+        held = (message, data)
+        heldTimer = Task { [weak self] in
+            try? await Task.sleep(for: Self.transcriptBatch)
+            guard !Task.isCancelled else { return }
+            self?.flushTranscript()
+        }
+    }
+
+    private func flushTranscript() {
+        heldTimer?.cancel()
+        heldTimer = nil
+        guard let data = held?.data, let sessionId else { return }
+        held = nil
+        enqueue(transcript: true) { [eventRequest] in try await eventRequest(sessionId, data) }
     }
 
     private func enqueue(transcript: Bool = false, _ operation: @escaping @MainActor () async throws -> [Data]) {

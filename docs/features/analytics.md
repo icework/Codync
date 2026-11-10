@@ -89,6 +89,15 @@ can be traced from the events around it:
 - **iPhone** (`CodyncKit` analytics client, no SDK) and **Android** (`Analytics.kt`, its port)
   send their own app-level events straight to PostHog. Widgets and the notification extension
   never send.
+- **The Codync cloud** (Worker, `cloud/src/analytics.ts`) reports only what no device can see: asking
+  the provider to wake a sleeping Codync Cloud computer and how long until its host was back. It
+  follows that computer's own switch: the host tells the cloud as soon as it turns
+  (`POST /v1/host/analytics`, `remote::managed::share_analytics`) and again with every sleep
+  request (`POST /v1/host/sleep` `analytics`, which covers a change the cloud couldn't hear); the
+  cloud keeps it on the machine (`cloud_machines.analytics`) and sends nothing until a host has said
+  yes. Events are linked to the computer's account, carry no location (`$geoip_disable`) and the
+  same `computer` key as its host's; `env` is `dev` on the dev cloud (`ANALYTICS_ENV`), and nothing
+  is sent where `POSTHOG_HOST` is unset (local runs).
 - **codync.dev** counts page views, time on page, scrolling, load speed and clicks on download
   and outbound links without cookies, through its own `/e` path ([website](../reference/analytics-events.md#website)).
 
@@ -160,6 +169,7 @@ join an iPhone's `computer_paired` to the computer's events on `computer` in SQL
 | New user | First event of any kind in the period. A new computer also sends `host_started` with `first_run`. |
 | Onboarded | Desktop: `onboarding_completed`. Phones: `computer_paired` (or `onboarding_completed` with `via = skipped`, which is not onboarded). Funnels: [analytics events](../reference/analytics-events.md#funnels). |
 | Star rate | `star_prompt_answered` with `starred` ÷ all `star_prompt_answered`, per `ask`. |
+| Ko-fi rate | `kofi_invite_answered` with `opened` ÷ `kofi_invite_shown`, per `app` (the terminal UI sends only `kofi_invite_shown`: its link opens in the terminal). |
 | Activated | Sent ≥1 message from a phone (`message_sent`, `client = remote`) within 7 days of first seen. In the first week of data, 4 of 5 such users came back after 24 h and none of the 6 computer-only ones did. |
 | Successful turn rate | `turn_finished` with `outcome = done` ÷ all `turn_finished` with `source = user`, per agent and per `$os`. |
 | Frustration rate | (`turn_stopped` + `session_reset`) ÷ `message_sent`, per `$os`. |

@@ -64,7 +64,7 @@ Codync/
 ├── private-relay/             # Single-process relay (the cloud WebSocket subset) for a person's own computers
 ├── relay/                     # Separate APNs push Worker; src/ and test/
 ├── discord/                   # Discord GitHub-role Worker (discord.codync.dev)
-├── docs/                      # Architecture, features, design, guides, reference, plans, investigations, archive
+├── docs/                      # Architecture, features, design, guides, reference, upstream agent bugs, plans, investigations, archive
 ├── tools/                     # Release, App Store and Google Play submission (store_release.py: what both share), font scripts
 ├── packaging/                 # Distribution templates
 ├── marketing/app-store-screenshots/ # App Store screenshot editor (bun dev; Export bundle → out/)
@@ -72,7 +72,7 @@ Codync/
 └── .github/workflows/         # CI, signing and release automation
 ```
 
-`build/`, `apps/ios/Kit/.build/`, `apps/desktop/out/`, `apps/desktop/dist/`, Cargo `target/`, `node_modules/` and Wrangler local state are generated working data. They are not source modules and should not become documentation locations. Edit `apps/project.yml` and run `xcodegen generate --spec apps/project.yml`; never hand-edit `project.pbxproj`.
+`build/`, `apps/ios/Kit/.build/`, `apps/desktop/out/`, `apps/desktop/dist/`, Cargo `target/`, `node_modules/` and Wrangler local state are generated working data. They are not source modules and should not become documentation locations. Edit `apps/project.yml` and run `xcodegen generate --spec apps/project.yml`; never hand-edit `project.pbxproj` (`tools/bump-version.py` sets its `MARKETING_VERSION` lines to what xcodegen would write).
 
 ## Targets
 
@@ -94,7 +94,7 @@ Codync/
 | SQLite transcript, bots, lanes and sessions | `host/src/store/` (`entries.rs`, `bots.rs`, `model.rs`, `devices.rs`, `schema.rs`) |
 | Agent process, ACP, queue and session lifecycle | `host/src/agent/bot/` (`launch.rs`, `queue.rs`, `session.rs`, `steer.rs`, `turn.rs`, `updates.rs`; `codex_names.rs` / `pi_tools.rs` how Codex and pi get Codync's MCP servers), `acp.rs` (+ `acp/codebuddy.rs`, CodeBuddy's ACP extensions), `process.rs` (process-tree ownership; `process_windows.rs` on Windows) |
 | Compaction timing and rollover | `host/src/agent/bot/compaction.rs`, the handoff card in `host/src/chat/handoff.rs`; the rules in `codync-mem`'s `compaction.rs` |
-| Group room turns / bot-to-bot requests | `host/src/chat/group.rs` / `team.rs` |
+| Group room turns / bot-to-bot requests | `host/src/chat/group.rs` (+ `group/rooms.rs`) / `team.rs` |
 | Voice calls (the call, the voice's instructions and tools, transcripts, call lines) | `host/src/chat/calls/` (`mod.rs`, `context.rs`, `project.rs` the git state, `tools.rs`, `announce.rs` what the voice hears while the call lasts, `speech.rs` text as a voice says it); the user's messages it relays go through `host/src/chat/messages.rs` like typed ones; clients' `CallLink` (iPhone `CodyncUI/Call/CallLink.swift`, desktop `views/call/call-link.ts`, Android `core/Calls.kt` + `HostCallLink.kt`) and call rows (`CallRows`); the call on the iPhone's Lock Screen (`CodyncUI/Call/CallActivity.swift`, the Live Activity) and Android's call notification (`VoiceService.kt`) |
 | Dev servers (programs a bot keeps running) | `host/src/dev_servers/` (`run.rs` starting and stopping, `scan.rs` restoring and reading ports, `ports.rs`, `tools.rs` the bot's tools, `logs.rs`, `detected.rs` what a bot left running through its shell, `platform.rs`); desktop `views/thread/DevServersSection.tsx` (+ `src/shared/dev-servers.ts`); iPhone `CodyncUI/Bots/DevServersSection.swift`; Android `DevServersSection.kt`; terminal `host/src/tui/manage/dev_servers.rs` and `view/dev_servers.rs` |
 | Team management (bots creating and changing bots) | `host/src/chat/manage.rs`, its approval card (`Cmd::Approve`) in `agent/bot/updates.rs` |

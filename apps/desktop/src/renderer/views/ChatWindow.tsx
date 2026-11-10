@@ -38,11 +38,8 @@ import { HostStateView } from './HostStateView'
 import { StartupRecovery } from './StartupRecovery'
 export { EmptyState } from './HostStateView'
 import { RefreshIndicator } from './RefreshIndicator'
-import { StarPrompt } from './StarPrompt'
-import { JoinAccountPrompt } from './JoinAccountPrompt'
-import { MoveComputerPrompt } from './MoveComputerPrompt'
+import { MainPrompts } from './MainPrompts'
 import { PairingRequestPrompt } from './PairingRequestPrompt'
-import { DeleteAccountPrompt } from './DeleteAccountPrompt'
 import { AccountPanelLayer, ProfileAvatar } from './PanelMenus'
 import { DesktopActionMenu } from './DesktopActionMenu'
 import { moveToSectionItems, sectionHeaderItems } from './section-menus'
@@ -142,7 +139,7 @@ export function ChatWindow() {
         <AccountWelcomeView onContinue={welcome.finish} />
       )}
       {!welcome.shown && accessSetup !== null && showsChat ? null : <div className="window-drag drag" />}
-      {!welcome.shown && accessSetup !== null ? <><StarPrompt /><MoveComputerPrompt /><JoinAccountPrompt /><DeleteAccountPrompt /></> : null}
+      <MainPrompts ready={!welcome.shown && accessSetup !== null} />
       <Sheet open={showAccess} onClose={() => setShowAccess(false)} width={660} height={Math.min(820, window.innerHeight - 80)}>
         <ModalHeader icon="hand.raised" title={tr(`Computer access`)} />
         <ComputerAccessView onContinue={(ready) => { finishAccess(ready, false); setShowAccess(false) }} />
@@ -356,7 +353,7 @@ function ChatSplitView() {
     detail = (
       <div className="empty-detail">
         <div className="detail-drag drag" />
-        <HStack align="stretch" className="empty-detail-crew">
+        <HStack align="stretch" gap={12}>
           <CharacterAvatar shape="blob" color="blue" size={60} mood="working" />
           <CharacterAvatar shape="squircle" color="orange" size={60} />
           <CharacterAvatar shape="teardrop" color="violet" size={60} mood="working" />

@@ -471,6 +471,8 @@ Desktop and iPhone dictation open Voice chat settings when the selected provider
 
 ## OpenAI GPT-Live (personal build)
 
+This personal capability is local-host only. Managed cloud hosts advertise `supportsLive: false`, keep standard voice requests on Keeper grants, and refuse raw-key access for Live setup/cleanup. Local keys remain in the existing vault and are not moved to Keeper by an app update.
+
 GPT-Live is opt-in through the existing OpenAI realtime model picker. `voiceStatus.supportsLive` advertises support; clients check the current host before starting or testing a saved Live selection and show an update instruction for older hosts. New clients request `voiceModels` with `supportsLive: true`; only those responses include conversational `gpt-live-*` models (not transcription models). Cached defaults remain Realtime, so an older client never automatically receives an incompatible model. Explicit Realtime selections continue through their existing engine.
 
 The host implements `startLiveCall`, `callLiveEvent` and `callLiveUpdate`. It creates `POST /v1/live/sessions` with the client's gathered SDP offer, the provider key from its vault, `store: false`, and Responses delegation through `gpt-6-luna`. The voice prompt handles conversation and delegation; the existing call instructions and six tools belong to the Responses backend. The API key and routing configuration never go to the client. Audio remains direct WebRTC between the device and OpenAI.

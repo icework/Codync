@@ -89,7 +89,7 @@ Keys are entered on the computer, never on the phone:
 
 Once saved, the section shows **Key saved** with **Test key**, **Replace key** and **Remove key**. The iPhone shows whether the computer has a key and can test it, and tells you where to add one if it doesn't.
 
-The key is stored encrypted in Codync's vault on the computer (with the system keychain, as for [connector credentials](/docs/connectors-and-skills)), so one key serves the iPhone and the desktop app. It's never logged and never sent to the relay or to Codync's cloud.
+On your own computer, the key is stored encrypted in Codync's vault (with the system keychain, as for [connector credentials](/docs/connectors-and-skills)), so one key serves the iPhone and the desktop app. It is never logged or sent to the relay. On a Codync Cloud computer, Keeper stores the key and proxies the standard voice requests; the host and its agents do not receive the raw key.
 
 ## What goes where
 
@@ -130,6 +130,8 @@ The shortcut needs no Accessibility or Input Monitoring permission, and the app 
 
 
 ### GPT-Live with OpenAI
+
+In the personal build, GPT-Live is available on your own Mac with a locally stored key. Codync Cloud computers keep their credentials behind Keeper and currently offer the standard Realtime/Gemini paths; they do not advertise GPT-Live or export the provider key.
 
 In **Voice chat**, choose **OpenAI**, **Realtime**, then a `gpt-live-*` model offered by your API key (for example `gpt-live-1`). This requires a host and client with GPT-Live support. Existing Realtime choices and defaults stay unchanged. Availability comes from OpenAI's API model list; a ChatGPT product rollout does not imply the same model name is available through the API.
 

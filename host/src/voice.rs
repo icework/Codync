@@ -392,5 +392,4 @@ mod tests {
         assert_eq!(cloud["supportsLive"], false);
         assert!(keys::direct_key(&store, Provider::OpenAi).unwrap_err().to_string().contains("cloud"));
     }
-
 }

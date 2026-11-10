@@ -137,9 +137,19 @@ mod daemon {
             }
         }
 
+        #[cfg(test)]
         pub fn put_record(&self, slot: &str, record: &Record) -> Result<()> {
             let plain = Zeroizing::new(serde_json::to_vec(record)?);
             self.secrets.put(&*self.key()?, slot, store::Kind::Proxied, &plain)
+        }
+
+        /// Applies a record edit and its write under the same Secrets lock.
+        pub fn update_record(
+            &self,
+            slot: &str,
+            edit: impl FnOnce(Option<Record>) -> Result<Option<Record>>,
+        ) -> Result<Option<Record>> {
+            self.secrets.update_proxied(&*self.key()?, slot, edit)
         }
 
         /// A new grant on proxied `slot` for `ttl` seconds (at most a day; none or 0: until revoked).

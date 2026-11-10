@@ -110,9 +110,8 @@ fn handle(keeper: &Keeper, request: Request) -> Result<Value> {
         }
         Request::PutProxied { slot, record, keep } => {
             let slot = checked(&slot)?;
-            let old = keeper.record(slot)?;
-            let record = (*record).checked()?.keeping(old, &keep);
-            keeper.put_record(slot, &record)?;
+            let record = (*record).checked()?;
+            keeper.update_record(slot, |old| Ok(Some(record.keeping(old, &keep))))?;
             json!(true)
         }
         Request::Delete { slot } => {
@@ -123,14 +122,7 @@ fn handle(keeper: &Keeper, request: Request) -> Result<Value> {
         Request::Has { slot } => json!(keeper.secrets.kind(checked(&slot)?).is_some()),
         Request::SignedIn { slot } => json!(keeper.record(checked(&slot)?)?.is_some_and(|r| r.oauth.is_some())),
         Request::Names { prefix } => json!(keeper.secrets.names(&prefix)),
-        Request::Reveal { slot } => match keeper.secrets.kind(checked(&slot)?) {
-            None => Value::Null,
-            Some(Kind::Proxied) => bail!("{slot} can be used through a grant, never read"),
-            Some(Kind::Visible) => match keeper.secrets.get(&*keeper.key()?, &slot)? {
-                Some((_, plain)) => json!(String::from_utf8(plain.to_vec()).map_err(|_| anyhow!("not text"))?),
-                None => Value::Null,
-            },
-        },
+        Request::Reveal { slot } => visible(keeper.secrets.get(&*keeper.key()?, checked(&slot)?)?)?,
         Request::Grant { slot, ttl_secs } => serde_json::to_value(keeper.grant(checked(&slot)?, ttl_secs)?)?,
         Request::Revoke { token } => {
             keeper.revoke(&token);
@@ -138,6 +130,15 @@ fn handle(keeper: &Keeper, request: Request) -> Result<Value> {
         }
         Request::Update { .. } => bail!("update runs on its own"),
     })
+}
+
+/// Only the kind returned with the decrypted snapshot may authorize revealing its value.
+fn visible(secret: Option<(Kind, Zeroizing<Vec<u8>>)>) -> Result<Value> {
+    match secret {
+        None => Ok(Value::Null),
+        Some((Kind::Proxied, _)) => bail!("a proxied secret can be used through a grant, never read"),
+        Some((Kind::Visible, plain)) => Ok(json!(String::from_utf8(plain.to_vec()).map_err(|_| anyhow!("not text"))?)),
+    }
 }
 
 #[cfg(test)]
@@ -151,5 +152,13 @@ mod tests {
         for bad in ["", "a b", "a/b", "ä", &"x".repeat(201)] {
             assert!(checked(bad).is_err(), "{bad}");
         }
+    }
+    #[test]
+    fn a_proxied_snapshot_is_never_revealed_even_after_an_earlier_visible_check() {
+        let secret = Zeroizing::new(b"fake-proxied-credential".to_vec());
+        let error = visible(Some((Kind::Proxied, secret))).unwrap_err().to_string();
+        assert!(!error.contains("fake-proxied-credential"));
+        assert_eq!(visible(Some((Kind::Visible, Zeroizing::new(b"visible".to_vec())))).unwrap(), "visible");
+        assert!(visible(None).unwrap().is_null());
     }
 }

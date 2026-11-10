@@ -66,18 +66,25 @@ async fn forward(keeper: &Arc<Keeper>, request: Request) -> Result<Response, Sta
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
-    let url = target(&record, rest, request.uri().query()).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let token = token.to_owned();
+    let rest = rest.to_owned();
     let (parts, body) = request.into_parts();
     let body = axum::body::to_bytes(body, MAX_BODY).await.map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
     if record.oauth.as_ref().is_some_and(|o| o.expires_at != 0 && o.expires_at <= now() + EARLY_SECS) {
         record = refreshed(keeper, &slot, record).await;
     }
-    let mut answer = send(&slot, &record, &parts, &url, body.clone()).await?;
+    if keeper.granted(&token).as_deref() != Some(slot.as_str()) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let mut answer = send(&slot, &record, &parts, &rest, body.clone()).await?;
     // Once, on a 401: the sign-in may have ended early.
     if answer.status() == StatusCode::UNAUTHORIZED && record.oauth.is_some() {
         let fresh = refreshed(keeper, &slot, record.clone()).await;
         if fresh.oauth.is_some() && fresh != record {
-            answer = send(&slot, &fresh, &parts, &url, body).await?;
+            if keeper.granted(&token).as_deref() != Some(slot.as_str()) {
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+            answer = send(&slot, &fresh, &parts, &rest, body).await?;
         }
     }
     Ok(response(answer))
@@ -115,9 +122,11 @@ async fn send(
     slot: &str,
     record: &Record,
     parts: &Parts,
-    url: &reqwest::Url,
+    rest: &str,
     body: axum::body::Bytes,
 ) -> Result<reqwest::Response, StatusCode> {
+    // Refresh may return a replacement record. Its headers and destination must share the same snapshot.
+    let url = target(record, rest, parts.uri.query()).map_err(|_| StatusCode::BAD_REQUEST)?;
     let mut headers = HeaderMap::new();
     for (name, value) in &parts.headers {
         let n = name.as_str();
@@ -132,7 +141,7 @@ async fn send(
         value.set_sensitive(true);
         headers.insert(name, value);
     }
-    client().request(parts.method.clone(), url.clone()).headers(headers).body(body).send().await.map_err(|e| {
+    client().request(parts.method.clone(), url).headers(headers).body(body).send().await.map_err(|e| {
         tracing::warn!(slot, error = %e.without_url(), "the upstream couldn't be reached");
         StatusCode::BAD_GATEWAY
     })
@@ -239,35 +248,12 @@ async fn save(keeper: &Arc<Keeper>, slot: &str, current: Record, fresh: Record) 
     let keeper = keeper.clone();
     let slot = slot.to_owned();
     tokio::task::spawn_blocking(move || {
-        let now = keeper.record(&slot)?;
-        if now.as_ref() != Some(&current) {
-            return now.ok_or_else(|| anyhow!("the record is gone"));
-        }
-        keeper.put_record(&slot, &fresh)?;
-        Ok(fresh)
+        keeper
+            .update_record(&slot, |now| Ok(if now.as_ref() == Some(&current) { Some(fresh) } else { now }))?
+            .ok_or_else(|| anyhow!("the record is gone"))
     })
     .await?
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn requests_stay_under_their_upstream() {
-        assert_eq!(split("/t/abc/v1/models"), Some(("abc", "/v1/models")));
-        assert_eq!(split("/t/abc"), Some(("abc", "")));
-        assert_eq!(split("/t//x"), None);
-        assert_eq!(split("/x/abc"), None);
-        let mut record = Record::header("https://api.example.com/v1", "x-api-key", "k".into());
-        let url = |r: &Record, rest, q| target(r, rest, q).unwrap().to_string();
-        assert_eq!(url(&record, "/models", None), "https://api.example.com/v1/models");
-        assert_eq!(url(&record, "", Some("a=1")), "https://api.example.com/v1?a=1");
-        assert_eq!(url(&record, "//evil.example/x", None), "https://api.example.com/v1//evil.example/x");
-        assert!(url(&record, "/../../x", None).starts_with("https://api.example.com/"));
-        assert!(url(&record, "@evil.example/x", None).starts_with("https://api.example.com/"));
-        record.strip_query = vec!["key".into()];
-        assert_eq!(url(&record, "/m", Some("key=codync-keeper&alt=sse")), "https://api.example.com/v1/m?alt=sse");
-        assert_eq!(url(&record, "/m", Some("key=x")), "https://api.example.com/v1/m");
-    }
-}
+mod tests;

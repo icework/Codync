@@ -108,7 +108,8 @@ pub(super) async fn validate_openai_key(key: &str, fallback: &str) -> Result<Opt
         |validation| async move {
             match validation {
                 KeyValidation::Realtime(model) => {
-                    super::mint(Provider::OpenAi, &keys::Access::direct(Provider::OpenAi, key), &model, "marin").await?;
+                    super::mint(Provider::OpenAi, &keys::Access::direct(Provider::OpenAi, key), &model, "marin")
+                        .await?;
                 }
                 KeyValidation::Live(model) => live::validate_access(key, &model).await?,
             }

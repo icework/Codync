@@ -97,6 +97,34 @@ impl Secrets {
         Ok(())
     }
 
+    /// Atomically edits a proxied record. A missing/visible slot is `None`; returning `None` leaves it untouched.
+    /// The callback must not reenter Secrets. This keeps refresh/keep decisions and their writes on one snapshot.
+    pub fn update_proxied(
+        &self,
+        key: &[u8],
+        slot: &str,
+        edit: impl FnOnce(Option<super::record::Record>) -> Result<Option<super::record::Record>>,
+    ) -> Result<Option<super::record::Record>> {
+        let mut items = self.items.locked();
+        let current = match items.get(slot).filter(|item| item.kind == Kind::Proxied) {
+            Some(item) => {
+                let plain = vault::open(key, aad(slot, item.kind).as_bytes(), &item.sealed)?;
+                Some(serde_json::from_slice(&plain).context("a damaged record")?)
+            }
+            None => None,
+        };
+        let record = edit(current)?;
+        if let Some(record) = &record {
+            let plain = Zeroizing::new(serde_json::to_vec(record)?);
+            let sealed = vault::seal(key, aad(slot, Kind::Proxied).as_bytes(), &plain)?;
+            let mut next = items.clone();
+            next.insert(slot.to_owned(), Item { kind: Kind::Proxied, sealed });
+            self.save(&next)?;
+            *items = next;
+        }
+        Ok(record)
+    }
+
     /// `false` when there was nothing in `slot`.
     pub fn delete(&self, slot: &str) -> Result<bool> {
         let mut items = self.items.locked();

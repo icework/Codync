@@ -78,12 +78,13 @@ pub fn while_unchanged<T>(hub: &Hub, f: impl FnOnce() -> T) -> T {
 }
 
 /// Out of an account, cloud assistants go off and the 6-digit check comes back on: the account this computer
-/// joins next is asked again.
+/// joins next is asked again. A cloud computer Codync runs for its user keeps approving that account's devices: it
+/// is out of the account only until its first claim completes.
 pub fn out_of_account(hub: &Hub) -> Result<()> {
     if assistant::enabled(&hub.store) {
         assistant::set_enabled(hub, false)?;
     }
-    if cloud::approval(&hub.store) == Approval::Auto {
+    if cloud::approval(&hub.store) == Approval::Auto && !super::managed::is_managed(&hub.store) {
         cloud::set_approval(hub, Approval::Code)?;
     }
     Ok(())
@@ -151,7 +152,7 @@ pub async fn join_from_phone(hub: &Hub, key: &str, certificate: &Value, claim_id
     }
     // Finish the only asynchronous preparation first. No account or device checked before the approval is trusted
     // after that wait; revocation and a change of account must win over an old approval card.
-    let device = tokio::task::spawn_blocking(crate::service::device).await?;
+    let device = claim_device(&hub.store).await?;
     while_unchanged(hub, || finish_phone_join(hub, key, certificate, claim_id, nonce, device, now_ms()))
 }
 
@@ -163,7 +164,7 @@ fn finish_phone_join(
     certificate: &Value,
     claim_id: &str,
     nonce: &str,
-    device: crate::service::Device,
+    device: ClaimDevice,
     now: i64,
 ) -> Result<Value> {
     if !can_join(hub) {
@@ -191,7 +192,7 @@ fn finish_phone_join(
 pub async fn sign_claim(hub: &Hub, claim_id: &str, nonce: &str, user_id: &str) -> Result<Value> {
     cloud::require_accounts(&hub.store)?;
     check_claim(claim_id, nonce, user_id)?;
-    let device = tokio::task::spawn_blocking(crate::service::device).await?;
+    let device = claim_device(&hub.store).await?;
     let signed = signed_claim(hub, claim_id, nonce, user_id, device);
     note_signed(hub);
     Ok(signed)
@@ -212,8 +213,21 @@ fn note_signed(hub: &Hub) {
     hub.cloud.relay_wake.notify_one();
 }
 
+struct ClaimDevice {
+    name: String,
+    device: crate::service::Device,
+}
+
+/// Prepare Store-dependent and asynchronous identity before taking the account/device locks.
+async fn claim_device(store: &Store) -> Result<ClaimDevice> {
+    Ok(ClaimDevice {
+        name: super::managed::computer_name(store),
+        device: super::managed::computer_device(store).await?,
+    })
+}
+
 /// Pure signing: no store access or await, so a phone join can hold both account and device locks.
-fn signed_claim(hub: &Hub, claim_id: &str, nonce: &str, user_id: &str, device: crate::service::Device) -> Value {
+fn signed_claim(hub: &Hub, claim_id: &str, nonce: &str, user_id: &str, device: ClaimDevice) -> Value {
     let computer_id = hub.identity.computer_id();
     let box_key = hub.identity.box_pub_b64();
     let input = crypto::claim_input(claim_id, nonce, user_id, &computer_id, &box_key);
@@ -221,9 +235,9 @@ fn signed_claim(hub: &Hub, claim_id: &str, nonce: &str, user_id: &str, device: c
         "computerId": computer_id,
         "signKey": hub.identity.sign_pub_b64(),
         "boxKey": box_key,
-        "name": crate::service::host_name(),
+        "name": device.name,
         "platform": std::env::consts::OS,
-        "device": device,
+        "device": device.device,
         "version": env!("CARGO_PKG_VERSION"),
         "sig": crypto::b64(&hub.identity.sign(input.as_bytes())),
     })
@@ -328,7 +342,7 @@ mod tests {
         let certificate = certificate::test_certificate(&key, "user_a");
         let finish = |now| {
             while_unchanged(&hub, || {
-                finish_phone_join(&hub, &key, &certificate, "claim", "nonce", crate::service::Device::Desktop, now)
+                finish_phone_join(&hub, &key, &certificate, "claim", "nonce", ClaimDevice { name: "Test computer".into(), device: crate::service::Device::Desktop }, now)
             })
         };
         assert!(finish(now_ms() + 60_001).is_err(), "a certificate valid when asked has since expired");
@@ -455,5 +469,17 @@ mod tests {
         assert!(owner(&hub.store).is_none(), "a private relay has no accounts");
         hub.store.kv_set("cloud_enabled", "false").unwrap();
         assert!(owner(&hub.store).is_none(), "nor does a computer with its cloud off");
+    }
+
+    #[test]
+    fn out_of_an_account_only_a_cloud_computer_keeps_approving_by_itself() {
+        let hub = hub();
+        cloud::set_approval(&hub, Approval::Auto).unwrap();
+        out_of_account(&hub).unwrap();
+        assert_eq!(cloud::approval(&hub.store), Approval::Code);
+        cloud::set_approval(&hub, Approval::Auto).unwrap();
+        crate::remote::managed::set_managed(&hub.store).unwrap();
+        out_of_account(&hub).unwrap();
+        assert_eq!(cloud::approval(&hub.store), Approval::Auto, "before its first claim completes");
     }
 }

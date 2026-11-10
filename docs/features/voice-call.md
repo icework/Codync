@@ -240,10 +240,12 @@ Ordinary offline messages still use the existing ordered retry flow.
 
 ### Where the key lives
 
-- On the computer, in the host's vault (`host/src/voice.rs`, slot `voice`: encrypted in
+- On the computer, in the host's vault (`host/src/voice/keys.rs`, slot `voice`: encrypted in
   `codync.db` with the vault key from Keychain / Secret Service), so one key serves the iPhone and the
   desktop app. It reaches the host once, over the encrypted channel, and never leaves it again; it is never
-  logged and never sent to the relay or our cloud.
+  logged and never sent to the relay or our cloud. On a Codync Cloud computer it goes on to the computer's keeper
+  instead (`host/src/voice/keys.rs`, proxied slot `voice:<provider>`), and the host reaches the provider through a
+  10-minute grant that adds the key: [Agents and the host's secrets](../plans/codync-cloud.md#agents-and-the-hosts-secrets).
 - Host methods (control scope): `voiceStatus` (which providers have a key), `setVoiceKey
   {provider, key}` (validated against an available voice model before it's kept; Live-only keys use model access rather than a billable session; empty removes it),
   `voiceSession {provider, model, voice}` → `{credential}` for Realtime/Gemini or `{validated:true}` for GPT-Live, `voiceModels {provider, supportsLive?}` → `{models,

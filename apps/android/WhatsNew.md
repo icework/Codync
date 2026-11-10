@@ -7,6 +7,15 @@ released version's section; a version without one gets the PRs' "What's New: And
 else a generic "Bug fixes and improvements" line. Delete old sections.
 -->
 
+## 2.42.2
+### zh-Hant
+- 第一次用 Google、GitHub 或 Apple 登入的新使用者，現在能直接建立帳號；之前會回到歡迎畫面，帳號沒有建立。
+- 登入到一半離開登入頁面，不會再跳出「Error occurred with unknown message.」；真的登入失敗時，會提示檢查網路後再試一次。
+
+### en-US
+- New users signing in with Google, GitHub or Apple for the first time now get their account. Before, sign-in returned to the welcome screen without creating it.
+- Leaving the sign-in page partway no longer shows "Error occurred with unknown message." A sign-in that really fails asks you to check your connection and try again.
+
 ## 2.42.1
 ### zh-Hant
 - 離線後未送出的語音訊息不再自動重送，避免連到其他電腦時送錯對話。

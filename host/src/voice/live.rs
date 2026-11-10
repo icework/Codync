@@ -1,6 +1,6 @@
 //! GPT-Live session creation. Only the SDP answer and opaque session ID leave the host.
 
-use super::{Provider, checked, key, send};
+use super::{Provider, checked, keys, send};
 use crate::store::Store;
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
@@ -83,7 +83,7 @@ pub(crate) fn request(
 }
 
 pub(crate) async fn create(store: &Store, body: Value) -> Result<(String, String)> {
-    let key = key(store, Provider::OpenAi)?;
+    let key = keys::direct_key(store, Provider::OpenAi)?;
     let result = send(
         Provider::OpenAi,
         crate::http().post("https://api.openai.com/v1/live/sessions").bearer_auth(key).json(&body),
@@ -105,7 +105,7 @@ pub(crate) async fn close_abandoned(store: &Store, id: &str) {
     use futures::{SinkExt as _, StreamExt as _};
     use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest as _};
     let close = async {
-        let key = key(store, Provider::OpenAi)?;
+        let key = keys::direct_key(store, Provider::OpenAi)?;
         let mut url = reqwest::Url::parse("wss://api.openai.com/v1/live/sessions/")?;
         url.path_segments_mut().map_err(|()| anyhow!("Invalid Live URL."))?.pop_if_empty().push(id).push("attach");
         let mut request = url.as_str().into_client_request()?;

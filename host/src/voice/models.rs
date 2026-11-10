@@ -1,6 +1,6 @@
 //! Provider model discovery and stable defaults, shared by all clients.
 
-use super::{Defaults, Provider, defaults_key, key, live, send};
+use super::{Defaults, Provider, defaults_key, keys, live, send};
 use crate::store::Store;
 use anyhow::{Result, anyhow};
 use serde_json::{Value, json};
@@ -16,16 +16,14 @@ pub async fn models(store: &Store, p: Provider) -> Result<Value> {
 
 /// Live is opt-in: older clients never receive a model they cannot connect to.
 pub async fn models_for_client(store: &Store, p: Provider, supports_live: bool) -> Result<Value> {
-    let key = key(store, p)?;
+    let access = keys::access(store, p)?;
     let entries: Vec<Model> = match p {
         Provider::OpenAi => {
-            let v = send(p, crate::http().get("https://api.openai.com/v1/models").bearer_auth(&key)).await?;
+            let v = send(p, access.request(p, reqwest::Method::GET, "/v1/models")).await?;
             openai_entries(&v)
         }
         Provider::Gemini => {
-            let req = crate::http()
-                .get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000")
-                .header("x-goog-api-key", &key);
+            let req = access.request(p, reqwest::Method::GET, "/v1beta/models?pageSize=1000");
             let v = send(p, req).await?;
             v["models"]
                 .as_array()
@@ -46,7 +44,7 @@ pub async fn models_for_client(store: &Store, p: Provider, supports_live: bool) 
     let (realtime, transcribe, speech) = classify(p, &entries);
     let defaults = model_defaults(p, &entries);
     store.kv_set(&defaults_key(p), &serde_json::to_string(&defaults)?)?;
-    let offered = offered_models(p, realtime, &entries, supports_live);
+    let offered = offered_models(p, realtime, &entries, supports_live && !crate::remote::managed::is_managed(store));
     Ok(json!({"models": offered, "transcribe": transcribe, "speech": speech, "defaults": defaults}))
 }
 
@@ -110,7 +108,7 @@ pub(super) async fn validate_openai_key(key: &str, fallback: &str) -> Result<Opt
         |validation| async move {
             match validation {
                 KeyValidation::Realtime(model) => {
-                    super::mint(Provider::OpenAi, key, &model, "marin").await?;
+                    super::mint(Provider::OpenAi, &keys::Access::direct(Provider::OpenAi, key), &model, "marin").await?;
                 }
                 KeyValidation::Live(model) => live::validate_access(key, &model).await?,
             }
